@@ -16,7 +16,11 @@ local T = MiniTest.new_set({
         S = require('margin.session')
         A = require('margin.anchor')
         E = require('margin.export')
+        Act = require('margin.actions')
         S._reset(); A._reset()
+        -- Deterministic archive-confirm for Act.export: set _G.confirm_choice.
+        _G.confirm_choice = 1
+        vim.fn.confirm = function() return _G.confirm_choice end
       ]])
     end,
     post_case = function()
@@ -188,6 +192,103 @@ T['buffer']['re-export reuses the scratch buffer and window'] = function()
   eq(res.same_buf, true)
   eq(res.wins, 2)
   eq(res.has_second, true)
+end
+
+T['archive'] = MiniTest.new_set()
+
+T['archive']['render omits archived comments by default'] = function()
+  local res = child.lua_get([[(function()
+    vim.fn.writefile({ 'a', 'b', 'c' }, _G.tmp .. '/f.txt')
+    vim.cmd('edit ' .. _G.tmp .. '/f.txt')
+    local buf = vim.api.nvim_get_current_buf()
+    local keep = S.add(buf, 1, 1, 'keep me')
+    local gone = S.add(buf, 3, 3, 'already handed off')
+    A.on_buf_load(buf)
+    local sess = S.for_buf(buf)
+    S.set_archived(sess, gone, true)
+    return {
+      default = E.render(sess),
+      all = E.render(sess, true),
+    }
+  end)()]])
+  eq(res.default:find('keep me', 1, true) ~= nil, true)
+  eq(res.default:find('already handed off', 1, true), nil)
+  -- include_archived surfaces it with an (archived) header suffix
+  eq(res.all:find('already handed off', 1, true) ~= nil, true)
+  eq(res.all:find('(archived)', 1, true) ~= nil, true)
+end
+
+T['archive']['file export archives what it wrote'] = function()
+  local res = child.lua_get([[(function()
+    vim.fn.writefile({ 'a', 'b' }, _G.tmp .. '/f.txt')
+    vim.cmd('edit ' .. _G.tmp .. '/f.txt')
+    local buf = vim.api.nvim_get_current_buf()
+    S.add(buf, 1, 1, 'first pass')
+    A.on_buf_load(buf)
+    local out = _G.tmp .. '/review.md'
+    Act.export(out)                       -- writes + archives (confirm yes)
+    local after_first = Act.export(out)   -- nothing active left to export
+    S.add(buf, 2, 2, 'second pass')       -- a fresh comment
+    local second = Act.export(out)
+    return {
+      after_first = after_first,
+      has_second = second:find('second pass', 1, true) ~= nil,
+      has_first_in_second = second:find('first pass', 1, true) ~= nil,
+    }
+  end)()]])
+  -- Second export of an all-archived session yields nothing.
+  eq(res.after_first, '')
+  -- A new comment exports alone; the archived one is not re-included.
+  eq(res.has_second, true)
+  eq(res.has_first_in_second, false)
+end
+
+T['archive']['declining the confirm keeps comments active'] = function()
+  local res = child.lua_get([[(function()
+    vim.fn.writefile({ 'a', 'b' }, _G.tmp .. '/f.txt')
+    vim.cmd('edit ' .. _G.tmp .. '/f.txt')
+    local buf = vim.api.nvim_get_current_buf()
+    S.add(buf, 1, 1, 'keep active')
+    A.on_buf_load(buf)
+    _G.confirm_choice = 2  -- No: changed my mind
+    Act.export(_G.tmp .. '/review.md')
+    local archived = S.for_buf(buf).comments[1].archived
+    -- A second export still finds it active (nothing was archived).
+    local second = Act.export(_G.tmp .. '/review.md')
+    return { archived = archived, has = second:find('keep active', 1, true) ~= nil }
+  end)()]])
+  eq(res.archived, false)
+  eq(res.has, true)
+end
+
+T['archive']['preview split does not archive'] = function()
+  local res = child.lua_get([[(function()
+    vim.fn.writefile({ 'a', 'b' }, _G.tmp .. '/f.txt')
+    vim.cmd('edit ' .. _G.tmp .. '/f.txt')
+    local buf = vim.api.nvim_get_current_buf()
+    S.add(buf, 1, 1, 'preview me')
+    A.on_buf_load(buf)
+    E.run()  -- no path: scratch split, non-destructive
+    return S.for_buf(buf).comments[1].archived
+  end)()]])
+  eq(res, false)
+end
+
+T['archive']['bang file export does not re-archive'] = function()
+  local res = child.lua_get([[(function()
+    vim.fn.writefile({ 'a' }, _G.tmp .. '/f.txt')
+    vim.cmd('edit ' .. _G.tmp .. '/f.txt')
+    local buf = vim.api.nvim_get_current_buf()
+    local c = S.add(buf, 1, 1, 'note')
+    A.on_buf_load(buf)
+    local sess = S.for_buf(buf)
+    S.set_archived(sess, c, true)
+    local md = Act.export(_G.tmp .. '/all.md', true)  -- include archived
+    -- A plain re-export still finds nothing active (bang didn't unarchive).
+    return { has = md:find('note', 1, true) ~= nil, plain = Act.export(_G.tmp .. '/x.md') }
+  end)()]])
+  eq(res.has, true)
+  eq(res.plain, '')
 end
 
 T['empty'] = MiniTest.new_set()

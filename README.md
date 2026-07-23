@@ -15,6 +15,7 @@ like and margin renders on top.
 - **Navigation** via the quickfix list plus next/prev-comment motions.
 - **Export** to a scratch buffer or file as a fixed markdown format with
   per-comment diff hunks or code snippets.
+- **Archive** old comments.
 
 ## Install
 
@@ -37,6 +38,9 @@ map('n', '<leader>me', '<Plug>(margin-edit)')
 map('n', '<leader>md', '<Plug>(margin-delete)')
 map('n', '<leader>ml', '<Plug>(margin-list)')
 map('n', '<leader>mx', '<Plug>(margin-export)')
+map('n', '<leader>ma', '<Plug>(margin-archive)')
+map('n', '<leader>mA', '<Plug>(margin-unarchive)')
+map('n', '<leader>mt', '<Plug>(margin-archived)')
 map('n', ']m', '<Plug>(margin-next)')
 map('n', '[m', '<Plug>(margin-prev)')
 ```
@@ -48,8 +52,11 @@ map('n', '[m', '<Plug>(margin-prev)')
 | `:Margin comment` | Comment on the current line or visual range |
 | `:Margin edit` | Edit the comment under the cursor |
 | `:Margin delete` | Delete the comment under the cursor |
-| `:Margin list` | Open the quickfix list with all comments |
-| `:Margin export [path]` | Export markdown to a scratch split, or to a file |
+| `:Margin list[!]` | Open the quickfix list; `!` includes archived comments |
+| `:Margin export[!] [path]` | Export markdown to a scratch split, or to a file (which offers to archive what it wrote); `!` includes archived and archives nothing |
+| `:Margin archive` | Archive the comment under the cursor |
+| `:Margin unarchive` | Unarchive the comment under the cursor |
+| `:Margin archived` | Toggle visibility of archived comments (dimmed) |
 | `:Margin inline` | Toggle inline boxes (signs stay) |
 | `:Margin clear` | Delete all comments (after confirmation) |
 
@@ -60,16 +67,17 @@ aborts.
 
 ```lua
 require('margin').setup({
-  inline = true,        -- render virtual-line comment boxes
-  max_width = 80,       -- comment box wrap width
-  context_lines = 3,    -- export context / diff hunk ctxlen
-  sign_text = '┃',      -- sign-column indicator
-  data_dir = nil,       -- override stdpath('data')/margin
+  inline = true,         -- render virtual-line comment boxes
+  show_archived = false, -- render archived comments (dimmed)
+  max_width = 80,        -- comment box wrap width
+  context_lines = 3,     -- export context / diff hunk ctxlen
+  sign_text = '┃',       -- sign-column indicator
+  data_dir = nil,        -- override stdpath('data')/margin
 })
 ```
 
 Highlight groups (override freely): `MarginSign`, `MarginComment`,
-`MarginBorder`, `MarginOrphan`.
+`MarginBorder`, `MarginOrphan`, `MarginArchived`.
 
 ## Export format
 
@@ -97,6 +105,24 @@ it is the commented lines plus context, fenced with the file's language.
 Without a path the markdown opens in a `margin://export` scratch split, ready
 to edit, yank, or `:w file`. Re-exporting replaces its contents.
 
+## Archiving
+
+Archiving stops you from handing off the same comment twice. Writing an export
+to a file (`:Margin export review.md`) asks whether to archive the comments it
+wrote; answer yes and the next file export contains only comments added since,
+or decline (Esc / No) to keep them active. The scratch-split preview (no path)
+never archives.
+
+Archived comments are hidden by default and drop out of `:Margin export` and
+`:Margin list`, but keep their position and still re-anchor. `:Margin archived`
+toggles them visible, rendered dimmed with an `(archived)` tag; that's how you
+put the cursor on one to `:Margin unarchive` it. Visibility is independent of
+export: to include archived comments in output, add `!` (`:Margin list!`,
+`:Margin export!`), which archives nothing further.
+
+Archive or unarchive the comment under the cursor with `:Margin archive` /
+`:Margin unarchive`.
+
 ## Manual QA checklist
 
 1. `nvim -d a.txt b.txt`; comment on a line on each side; both panes stay
@@ -111,7 +137,11 @@ to edit, yank, or `:w file`. Re-exporting replaces its contents.
    it.
 8. Comment in a plain (non-diff) buffer; export uses a code snippet.
 9. `:Margin toggle` hides boxes but keeps signs.
-10. `:checkhealth margin` reports version, data dir, session count.
+10. `:Margin export review.md`; answer yes at the prompt; the exported comments
+    vanish. `:Margin archived` shows them dimmed with an `(archived)` tag; a
+    second `:Margin export review.md` reports no comments. Answering no at the
+    prompt keeps them active.
+11. `:checkhealth margin` reports version, data dir, session count.
 
 ## Development
 

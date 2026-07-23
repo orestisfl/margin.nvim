@@ -10,6 +10,7 @@ local store = require('margin.store')
 ---@field line_text string
 ---@field created_at string
 ---@field orphaned boolean
+---@field archived boolean
 
 ---@class margin.Session
 ---@field version integer
@@ -214,6 +215,7 @@ function M.add(buf, lnum, end_lnum, text, win)
     line_text = line0,
     created_at = now_iso(),
     orphaned = false,
+    archived = false,
   }
 
   local session = M.for_buf(buf)
@@ -234,6 +236,39 @@ function M.edit(session, comment, text)
   comment.text = text
   M.persist(session)
   emit(session, 'edit')
+end
+
+--- Set a comment's archived flag. Archived comments are excluded from export
+--- and the default comment list, but keep re-anchoring and render dimmed.
+---@param session margin.Session
+---@param comment margin.Comment
+---@param archived boolean
+function M.set_archived(session, comment, archived)
+  if comment.archived == archived then
+    return
+  end
+  comment.archived = archived
+  M.persist(session)
+  emit(session, 'archive')
+end
+
+--- Archive every not-yet-archived comment. Used after a file export so the
+--- next export omits what was already handed off.
+---@param session margin.Session
+---@return integer archived count newly archived
+function M.archive_active(session)
+  local n = 0
+  for _, c in ipairs(session.comments) do
+    if not c.archived then
+      c.archived = true
+      n = n + 1
+    end
+  end
+  if n > 0 then
+    M.persist(session)
+    emit(session, 'archive')
+  end
+  return n
 end
 
 --- Remove a comment from its session.
@@ -272,6 +307,21 @@ function M.comments_for_path(session, path)
   table.sort(out, function(a, b)
     return a.lnum < b.lnum
   end)
+  return out
+end
+
+--- Comments eligible for export / the comment list. Archived comments are
+--- excluded unless `include_archived` is set. Order matches storage order.
+---@param session margin.Session
+---@param include_archived boolean|nil
+---@return margin.Comment[]
+function M.select_comments(session, include_archived)
+  local out = {}
+  for _, c in ipairs(session.comments) do
+    if include_archived or not c.archived then
+      out[#out + 1] = c
+    end
+  end
   return out
 end
 

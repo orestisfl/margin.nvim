@@ -28,9 +28,21 @@ function M.delete()
   require('margin.actions').delete()
 end
 
---- Populate and open the quickfix list with all session comments.
-function M.list()
-  require('margin.qf').list()
+--- Populate and open the quickfix list with session comments.
+--- Archived comments are omitted unless `include_archived` is set.
+---@param include_archived boolean|nil
+function M.list(include_archived)
+  require('margin.qf').list(include_archived)
+end
+
+--- Archive the comment under the cursor (excludes it from export and list).
+function M.archive()
+  require('margin.actions').archive()
+end
+
+--- Unarchive the comment under the cursor.
+function M.unarchive()
+  require('margin.actions').unarchive()
 end
 
 --- Jump to the next comment in the current buffer (wraps).
@@ -48,17 +60,27 @@ function M.toggle_inline()
   require('margin.actions').toggle_inline()
 end
 
+--- Toggle visibility of archived comments (rendered dimmed when shown).
+function M.toggle_archived()
+  require('margin.actions').toggle_archived()
+end
+
 --- Delete all comments in the current session (after confirmation).
 function M.clear()
   require('margin.actions').clear()
 end
 
 --- Export the current session as markdown.
---- With a path, writes to that file; otherwise opens a scratch split.
+--- With a path, writes to that file and archives the comments written (no
+--- prompt; the interactive `:Margin export` asks first). Otherwise opens a
+--- scratch split. Archived comments are excluded, and archiving is skipped,
+--- unless `include_archived` is set.
 ---@param path string|nil
+---@param include_archived boolean|nil
 ---@return string markdown
-function M.export(path)
-  return require('margin.export').run(path)
+function M.export(path, include_archived)
+  local archive = path ~= nil and path ~= '' and not include_archived
+  return require('margin.export').run(path, include_archived, archive)
 end
 
 return M

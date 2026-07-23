@@ -6,6 +6,7 @@ local links = {
   MarginComment = 'Comment',
   MarginBorder = 'FloatBorder',
   MarginOrphan = 'DiagnosticWarn',
+  MarginArchived = 'NonText',
 }
 
 local done = false

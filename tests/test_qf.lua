@@ -66,6 +66,33 @@ T['list']['prefixes orphaned comments with [stale]'] = function()
   eq(qf[1].text:sub(1, 7), '[stale]')
 end
 
+T['list']['omits archived comments unless included'] = function()
+  local buf = open({ 'a', 'b', 'c' })
+  child.lua(([[
+    S.add(%d, 1, 1, 'active')
+    local gone = S.add(%d, 3, 3, 'handed off')
+    A.on_buf_load(%d)
+    S.set_archived(S.for_buf(%d), gone, true)
+  ]]):format(buf, buf, buf, buf))
+
+  child.lua([[ QF.list() ]])
+  local default = child.lua_get([[vim.fn.getqflist()]])
+  eq(#default, 1)
+  eq(default[1].text, 'active')
+
+  child.lua([[ QF.list(true) ]])
+  local all = child.lua_get([[vim.fn.getqflist()]])
+  eq(#all, 2)
+  -- archived entry is prefixed
+  local archived_line
+  for _, item in ipairs(all) do
+    if item.text:sub(1, 10) == '[archived]' then
+      archived_line = item.text
+    end
+  end
+  eq(archived_line, '[archived] handed off')
+end
+
 T['motions'] = MiniTest.new_set()
 
 T['motions']['next jumps to the following comment and wraps'] = function()
@@ -98,6 +125,21 @@ T['motions']['prev jumps to the previous comment and wraps'] = function()
   eq(child.lua_get([[ vim.fn.line('.') ]]), 2)
   child.lua([[ QF.prev() ]]) -- wrap to last
   eq(child.lua_get([[ vim.fn.line('.') ]]), 4)
+end
+
+T['motions']['skip hidden archived comments'] = function()
+  local buf = open({ 'a', 'b', 'c', 'd', 'e' })
+  child.lua(([[
+    S.add(%d, 2, 2, 'two')
+    local four = S.add(%d, 4, 4, 'four')
+    A.on_buf_load(%d)
+    S.set_archived(S.for_buf(%d), four, true)  -- hidden by default
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+  ]]):format(buf, buf, buf, buf))
+  child.lua([[ QF.next() ]])
+  eq(child.lua_get([[ vim.fn.line('.') ]]), 2)
+  child.lua([[ QF.next() ]]) -- wraps back to 2, never lands on hidden 4
+  eq(child.lua_get([[ vim.fn.line('.') ]]), 2)
 end
 
 return T

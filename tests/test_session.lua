@@ -145,6 +145,41 @@ T['CRUD']['comments_for_path sorts by line'] = function()
   eq(lnums, { 1, 3, 4 })
 end
 
+T['archive'] = MiniTest.new_set()
+
+T['archive']['add defaults archived to false'] = function()
+  local buf = open_file('a.txt', { 'a' })
+  local c = child.lua_get(([[ S.add(%d, 1, 1, 'x') ]]):format(buf))
+  eq(c.archived, false)
+end
+
+T['archive']['set_archived toggles the flag and persists'] = function()
+  local buf = open_file('a.txt', { 'a', 'b' })
+  local res = child.lua_get(([[(function()
+    local c = S.add(%d, 1, 1, 'note')
+    local sess = S.for_buf(%d)
+    S.set_archived(sess, c, true)
+    S._reset()
+    return S.for_buf(%d).comments[1].archived
+  end)()]]):format(buf, buf, buf))
+  eq(res, true)
+end
+
+T['archive']['archive_active archives only unarchived comments'] = function()
+  local buf = open_file('a.txt', { 'a', 'b', 'c' })
+  local res = child.lua_get(([[(function()
+    local c1 = S.add(%d, 1, 1, 'one')
+    S.add(%d, 2, 2, 'two')
+    local sess = S.for_buf(%d)
+    S.set_archived(sess, c1, true)
+    local first = S.archive_active(sess)   -- only 'two' remains active
+    local second = S.archive_active(sess)  -- nothing left
+    return { first = first, second = second }
+  end)()]]):format(buf, buf, buf))
+  eq(res.first, 1)
+  eq(res.second, 0)
+end
+
 T['persistence'] = MiniTest.new_set()
 
 T['persistence']['round-trips through JSON'] = function()

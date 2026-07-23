@@ -20,27 +20,53 @@ local function trim(s)
   return (s:gsub('^%s+', ''):gsub('%s+$', ''))
 end
 
---- Place (or replace) the anchor extmark for a comment in a buffer.
+--- Sign-column highlight for a comment by state, or nil when it has no sign.
+--- Hidden (archived, not shown) comments keep a position mark but no sign;
+--- archived-and-shown dims over stale.
+---@param comment margin.Comment
+---@return string|nil
+local function sign_hl(comment)
+  if not config.visible(comment) then
+    return nil
+  end
+  if comment.archived then
+    return 'MarginArchived'
+  end
+  if comment.orphaned then
+    return 'MarginOrphan'
+  end
+  return 'MarginSign'
+end
+
+--- Place or update a comment's extmark at `row`..`end_row` (0-based).
 ---@param buf integer
 ---@param comment margin.Comment
-local function set_mark(buf, comment)
-  local line_count = vim.api.nvim_buf_line_count(buf)
-  local row = math.max(0, math.min(comment.lnum - 1, line_count - 1))
-  local end_row = math.max(row, math.min(comment.end_lnum - 1, line_count - 1))
+---@param row integer
+---@param end_row integer
+local function place_mark(buf, comment, row, end_row)
   local end_line = vim.api.nvim_buf_get_lines(buf, end_row, end_row + 1, false)[1] or ''
-
+  local hl = sign_hl(comment)
   marks[buf] = marks[buf] or {}
-  local id = vim.api.nvim_buf_set_extmark(buf, M.ns, row, 0, {
+  marks[buf][comment.id] = vim.api.nvim_buf_set_extmark(buf, M.ns, row, 0, {
     id = marks[buf][comment.id],
     end_row = end_row,
     end_col = #end_line,
     right_gravity = false,
     end_right_gravity = true,
     invalidate = true,
-    sign_text = config.current.sign_text,
-    sign_hl_group = comment.orphaned and 'MarginOrphan' or 'MarginSign',
+    sign_text = hl and config.current.sign_text,
+    sign_hl_group = hl,
   })
-  marks[buf][comment.id] = id
+end
+
+--- Place (or replace) the anchor extmark for a comment at its stored position.
+---@param buf integer
+---@param comment margin.Comment
+local function set_mark(buf, comment)
+  local line_count = vim.api.nvim_buf_line_count(buf)
+  local row = math.max(0, math.min(comment.lnum - 1, line_count - 1))
+  local end_row = math.max(row, math.min(comment.end_lnum - 1, line_count - 1))
+  place_mark(buf, comment, row, end_row)
 end
 
 --- Find a unique trimmed match for `needle` within ±radius of `around`.
@@ -193,6 +219,10 @@ function M.reanchor_all()
 end
 
 --- Ensure anchor marks exist for all comments in a buffer (without re-scanning).
+--- A missing mark is placed; an existing one is left in place unless its sign
+--- differs from the comment's current state (recolor on archive, or add/drop
+--- the sign on a visibility toggle), in which case it is re-placed at its live
+--- position so the change never disturbs the tracked range.
 ---@param buf integer
 function M.ensure(buf)
   local path = session.path_for_buf(buf)
@@ -201,8 +231,15 @@ function M.ensure(buf)
   end
   local sess = session.for_buf(buf)
   for _, comment in ipairs(session.comments_for_path(sess, path)) do
-    if not (marks[buf] and marks[buf][comment.id]) then
+    local id = marks[buf] and marks[buf][comment.id]
+    if not id then
       set_mark(buf, comment)
+    else
+      local m = vim.api.nvim_buf_get_extmark_by_id(buf, M.ns, id, { details = true })
+      local d = m[3]
+      if m[1] and d and not d.invalid and d.sign_hl_group ~= sign_hl(comment) then
+        place_mark(buf, comment, m[1], d.end_row or m[1])
+      end
     end
   end
 end

@@ -44,20 +44,36 @@ local function wrap(text, width)
   return out
 end
 
+--- A single dimmed summary line: the comment's first line plus a state tag.
+---@param comment margin.Comment
+---@param tag string parenthesized suffix without the parentheses
+---@param hl string highlight group
+---@return table[] virt_lines
+local function summary_line(comment, tag, hl)
+  local first = vim.split(comment.text, '\n', { plain = true })[1] or ''
+  return { { { '└─ ' .. first .. ' (' .. tag .. ')', hl } } }
+end
+
 --- Virtual lines for a comment box: framed multi-line, or a one-line summary.
---- Orphaned comments render as a single stale line instead of a frame.
+--- Orphaned comments collapse to a single stale line. Archived comments show
+--- the full frame dimmed with an (archived) tag (only reached when visible).
 ---@param comment margin.Comment
 ---@param width integer
 ---@return table[] virt_lines (list of chunk-lists)
 local function box_virt_lines(comment, width)
-  local B, C, O = 'MarginBorder', 'MarginComment', 'MarginOrphan'
-
   if comment.orphaned then
-    local first = vim.split(comment.text, '\n', { plain = true })[1] or ''
-    return { { { '└─ ' .. first .. ' (stale)', O } } }
+    return summary_line(comment, 'stale', 'MarginOrphan')
+  end
+
+  local B, C = 'MarginBorder', 'MarginComment'
+  if comment.archived then
+    B, C = 'MarginArchived', 'MarginArchived'
   end
 
   local lines = wrap(comment.text, width - 3)
+  if comment.archived then
+    lines[#lines] = lines[#lines] .. ' (archived)'
+  end
   if #lines == 1 then
     return { { { '[ ', B }, { lines[1], C }, { ' ]', B } } }
   end
@@ -133,23 +149,25 @@ local function rebuild(tab)
         local line_count = vim.api.nvim_buf_line_count(buf)
 
         for _, comment in ipairs(comments) do
-          local _, end_lnum = anchor.range(buf, comment)
-          local vt = box_virt_lines(comment, width)
-          local box_row = math.max(0, math.min(end_lnum - 1, line_count - 1))
+          if config.visible(comment) then
+            local _, end_lnum = anchor.range(buf, comment)
+            local vt = box_virt_lines(comment, width)
+            local box_row = math.max(0, math.min(end_lnum - 1, line_count - 1))
 
-          vim.api.nvim_buf_set_extmark(buf, M.ns_box, box_row, 0, {
-            virt_lines = vt,
-            virt_lines_above = false,
-          })
-
-          if cp and vim.api.nvim_buf_is_valid(cp.buf) then
-            local m = diffmap.map(cp.buf, buf, end_lnum)
-            local cp_count = vim.api.nvim_buf_line_count(cp.buf)
-            local cp_row = math.max(0, math.min(m.line - 1, cp_count - 1))
-            vim.api.nvim_buf_set_extmark(cp.buf, M.ns_filler, cp_row, 0, {
-              virt_lines = blank_lines(#vt),
-              virt_lines_above = m.placement == 'above',
+            vim.api.nvim_buf_set_extmark(buf, M.ns_box, box_row, 0, {
+              virt_lines = vt,
+              virt_lines_above = false,
             })
+
+            if cp and vim.api.nvim_buf_is_valid(cp.buf) then
+              local m = diffmap.map(cp.buf, buf, end_lnum)
+              local cp_count = vim.api.nvim_buf_line_count(cp.buf)
+              local cp_row = math.max(0, math.min(m.line - 1, cp_count - 1))
+              vim.api.nvim_buf_set_extmark(cp.buf, M.ns_filler, cp_row, 0, {
+                virt_lines = blank_lines(#vt),
+                virt_lines_above = m.placement == 'above',
+              })
+            end
           end
         end
       end

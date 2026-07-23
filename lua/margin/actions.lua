@@ -3,8 +3,9 @@ local config = require('margin.config')
 
 local M = {}
 
---- The innermost comment whose live range contains the cursor line.
---- Smallest range wins when several overlap.
+--- The innermost visible comment whose live range contains the cursor line.
+--- Smallest range wins when several overlap. Hidden (archived, not shown)
+--- comments are skipped; show them with `:Margin archived` to act on them.
 ---@param buf integer
 ---@param lnum integer 1-based cursor line
 ---@return margin.Comment|nil
@@ -18,11 +19,13 @@ local function comment_at(buf, lnum)
   local anchor = require('margin.anchor')
   local best, best_span
   for _, c in ipairs(session.comments_for_path(sess, path)) do
-    local s, e = anchor.range(buf, c)
-    if lnum >= s and lnum <= e then
-      local span = e - s
-      if not best or span < best_span then
-        best, best_span = c, span
+    if config.visible(c) then
+      local s, e = anchor.range(buf, c)
+      if lnum >= s and lnum <= e then
+        local span = e - s
+        if not best or span < best_span then
+          best, best_span = c, span
+        end
       end
     end
   end
@@ -101,10 +104,62 @@ function M.delete()
   require('margin.render').redraw()
 end
 
+--- Set the archived flag on the comment under the cursor, then redraw.
+---@param archived boolean
+local function set_archived_at_cursor(archived)
+  local buf = vim.api.nvim_get_current_buf()
+  local lnum = vim.api.nvim_win_get_cursor(0)[1]
+  local comment, sess = comment_at(buf, lnum)
+  if not comment or not sess then
+    vim.notify('margin: no comment under cursor', vim.log.levels.WARN)
+    return
+  end
+  session.set_archived(sess, comment, archived)
+  require('margin.render').redraw()
+end
+
+--- Archive the comment under the cursor (excludes it from export/list).
+function M.archive()
+  set_archived_at_cursor(true)
+end
+
+--- Unarchive the comment under the cursor.
+function M.unarchive()
+  set_archived_at_cursor(false)
+end
+
 --- Toggle inline boxes (signs stay).
 function M.toggle_inline()
   config.current.inline = not config.current.inline
   require('margin.render').redraw()
+end
+
+--- Toggle visibility of archived comments (shown dimmed with an (archived)
+--- tag). They stay out of export and the comment list regardless.
+function M.toggle_archived()
+  config.current.show_archived = not config.current.show_archived
+  local state = config.current.show_archived and 'shown' or 'hidden'
+  vim.notify('margin: archived comments ' .. state, vim.log.levels.INFO)
+  require('margin.render').redraw()
+end
+
+--- Export the session, prompting before a file export archives its comments.
+--- Declining (Esc / No) keeps them active for a re-export. The preview split
+--- (no path) and `include_archived` re-dumps never archive, so never prompt.
+---@param path string|nil
+---@param include_archived boolean|nil
+---@return string markdown
+function M.export(path, include_archived)
+  local archive = false
+  if path and path ~= '' and not include_archived then
+    local sess = session.for_buf(vim.api.nvim_get_current_buf())
+    local n = #session.select_comments(sess, false)
+    if n > 0 then
+      local choice = vim.fn.confirm(('Archive %d exported comments?'):format(n), '&Yes\n&No', 1)
+      archive = choice == 1
+    end
+  end
+  return require('margin.export').run(path, include_archived, archive)
 end
 
 --- Delete every comment in the current session after confirmation.

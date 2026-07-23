@@ -56,10 +56,17 @@ With lazy.nvim: >lua
                         range, comment on the range.
 :Margin edit            Edit the comment under the cursor.
 :Margin delete          Delete the comment under the cursor.
-:Margin list            Populate and open the quickfix list with all comments.
-:Margin export [path]   Export the session as markdown. Without a path, opens
+:Margin list[!]         Populate and open the quickfix list. With `!`, includes
+                        archived comments (prefixed `[archived]`).
+:Margin export[!] [path]
+                        Export the session as markdown. Without a path, opens
                         the markdown in a scratch split; with a path, writes
-                        that file. See |margin-export|.
+                        that file and offers to archive the comments written.
+                        With `!`, includes already-archived comments and does
+                        not archive. See |margin-export| and |margin-archive|.
+:Margin archive         Archive the comment under the cursor.
+:Margin unarchive       Unarchive the comment under the cursor.
+:Margin archived        Toggle visibility of archived comments (dimmed).
 :Margin inline          Toggle inline comment boxes (signs remain).
 :Margin clear           Delete ALL comments in the session, after confirming.
 
@@ -76,6 +83,9 @@ No default keymaps are created. The following <Plug> mappings are provided: >
     <Plug>(margin-delete)
     <Plug>(margin-list)
     <Plug>(margin-export)
+    <Plug>(margin-archive)   archive comment under cursor
+    <Plug>(margin-unarchive)
+    <Plug>(margin-archived)  toggle visibility of archived comments
     <Plug>(margin-next)      jump to next comment in buffer (wraps)
     <Plug>(margin-prev)
 <
@@ -106,6 +116,11 @@ inline          (boolean, default true)
                 signs mark commented lines. Toggle at runtime with |:Margin|
                 inline.
 
+show_archived   (boolean, default false)
+                Render archived comments (dimmed, with an `(archived)` tag).
+                When off they are hidden entirely. Toggle at runtime with
+                |:Margin| archived. See |margin-archive|.
+
 max_width       (integer, default 80)
                 Wrap width for comment box text.
 
@@ -124,10 +139,11 @@ HIGHLIGHTS                                                   *margin-highlights*
 
 Defined with `default = true` links; override freely: >
 
-    MarginSign    -> DiagnosticSignInfo
-    MarginComment -> Comment
-    MarginBorder  -> FloatBorder
-    MarginOrphan  -> DiagnosticWarn
+    MarginSign     -> DiagnosticSignInfo
+    MarginComment  -> Comment
+    MarginBorder   -> FloatBorder
+    MarginOrphan   -> DiagnosticWarn
+    MarginArchived -> NonText
 <
 ==============================================================================
 7. EXPORT FORMAT                                                 *margin-export*
@@ -143,6 +159,27 @@ Without a path argument the markdown opens in a `margin://export` scratch
 split (filetype markdown), ready to edit, yank, or `:w file`. Re-exporting
 replaces its contents. `require('margin').export()` returns the markdown
 string.
+
+                                                              *margin-archive*
+Archiving avoids re-exporting comments you have already handed off. Archived
+comments are excluded from `:Margin export` and `:Margin list`, and are hidden
+from the buffer by default, but keep their position and still re-anchor.
+
+Writing an export to a file (`:Margin export {path}`) prompts before archiving
+the comments it wrote; confirm and the next file export contains only comments
+added since, or decline (Esc / No) to keep them active for a re-export. The
+scratch-split preview (no path) never archives.
+
+`:Margin archived` toggles archived comments visible (or set |show_archived|).
+Shown, they render the full box dimmed with an `(archived)` tag and a dimmed
+sign; hidden, motions and cursor actions skip them, so make them visible to put
+the cursor on one and `:Margin unarchive` it. Visibility does not put them back
+in the export. Archive or unarchive a single comment under the cursor with
+`:Margin archive` / `:Margin unarchive`.
+
+To include archived comments in output, add `!`: `:Margin list!` lists them
+(prefixed `[archived]`); `:Margin export!` renders them (header suffix
+` (archived)`) without archiving anything further.
 
 ==============================================================================
 8. DIFF ALIGNMENT                                             *margin-alignment*

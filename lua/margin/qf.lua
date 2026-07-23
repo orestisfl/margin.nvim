@@ -1,4 +1,5 @@
 local session = require('margin.session')
+local config = require('margin.config')
 
 local M = {}
 
@@ -7,6 +8,9 @@ local M = {}
 ---@return string
 local function first_line(comment)
   local line = vim.split(comment.text, '\n', { plain = true })[1] or ''
+  if comment.archived then
+    return '[archived] ' .. line
+  end
   if comment.orphaned then
     return '[stale] ' .. line
   end
@@ -24,21 +28,23 @@ local function abspath(sess, comment)
   return sess.root .. '/' .. comment.path
 end
 
---- Populate and open the quickfix list with all comments in the session.
-function M.list()
+--- Populate and open the quickfix list with the session's comments.
+--- Archived comments are omitted unless `include_archived` is set.
+---@param include_archived boolean|nil
+function M.list(include_archived)
   local sess = session.for_buf(vim.api.nvim_get_current_buf())
-  if #sess.comments == 0 then
-    vim.notify('margin: no comments', vim.log.levels.INFO)
-    return
-  end
 
   local items = {}
-  for _, c in ipairs(sess.comments) do
+  for _, c in ipairs(session.select_comments(sess, include_archived)) do
     items[#items + 1] = {
       filename = abspath(sess, c),
       lnum = c.lnum,
       text = first_line(c),
     }
+  end
+  if #items == 0 then
+    vim.notify('margin: no comments', vim.log.levels.INFO)
+    return
   end
   table.sort(items, function(a, b)
     if a.filename == b.filename then
@@ -51,7 +57,9 @@ function M.list()
   vim.cmd('copen')
 end
 
---- Comments in the current buffer sorted by their live line position.
+--- Visible comments in the current buffer sorted by their live line position.
+--- Hidden (archived, not shown) comments are skipped so motions never land on
+--- an invisible box.
 ---@return integer buf
 ---@return margin.Comment[]
 ---@return table<string, integer> id -> live lnum
@@ -63,7 +71,12 @@ local function current_buffer_comments()
   end
   local sess = session.for_buf(buf)
   local anchor = require('margin.anchor')
-  local comments = session.comments_for_path(sess, path)
+  local comments = {}
+  for _, c in ipairs(session.comments_for_path(sess, path)) do
+    if config.visible(c) then
+      comments[#comments + 1] = c
+    end
+  end
   local live = {}
   for _, c in ipairs(comments) do
     live[c.id] = (anchor.range(buf, c))

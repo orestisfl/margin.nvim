@@ -155,14 +155,19 @@ local function header(comment)
   if comment.side == 'old' then
     anchor = anchor .. ' (old version)'
   end
+  if comment.archived then
+    anchor = anchor .. ' (archived)'
+  end
   return '## ' .. anchor
 end
 
---- Render the whole session to the fixed markdown export format.
+--- Render the session to the fixed markdown export format.
+--- Archived comments are omitted unless `include_archived` is set.
 ---@param sess margin.Session
+---@param include_archived boolean|nil
 ---@return string
-function M.render(sess)
-  local comments = vim.deepcopy(sess.comments)
+function M.render(sess, include_archived)
+  local comments = session.select_comments(sess, include_archived)
   table.sort(comments, function(a, b)
     if a.path == b.path then
       return a.lnum < b.lnum
@@ -225,31 +230,50 @@ end
 
 --- Export the current session. With `path`, writes a file; otherwise opens
 --- the markdown in a scratch split. Returns the rendered markdown.
+---
+--- Archived comments are excluded unless `include_archived` is set. When
+--- `archive` is set, the comments written are archived afterwards so the next
+--- export omits them; the interactive prompt for this lives in the caller
+--- (see |actions.export|), keeping this function non-interactive.
 ---@param path string|nil
+---@param include_archived boolean|nil
+---@param archive boolean|nil archive the written comments after a file export
 ---@return string markdown
-function M.run(path)
+function M.run(path, include_archived, archive)
   local sess = session.for_buf(vim.api.nvim_get_current_buf())
-  if #sess.comments == 0 then
+
+  local exported = session.select_comments(sess, include_archived)
+  if #exported == 0 then
     vim.notify('margin: no comments to export', vim.log.levels.WARN)
     return ''
   end
 
-  local markdown = M.render(sess)
+  local markdown = M.render(sess, include_archived)
 
   if path and path ~= '' then
     local files = {}
-    for _, c in ipairs(sess.comments) do
+    for _, c in ipairs(exported) do
       files[c.path] = true
     end
     local abs = vim.fn.fnamemodify(path, ':p')
     vim.fn.writefile(vim.split(markdown, '\n', { plain = true }), abs)
+
+    local archived = 0
+    if archive then
+      archived = session.archive_active(sess)
+    end
+    local suffix = archived > 0 and (', archived %d'):format(archived) or ''
     vim.notify(
-      ('margin: exported %d comments (%d files) to %s'):format(
-        #sess.comments,
+      ('margin: exported %d comments (%d files) to %s%s'):format(
+        #exported,
         vim.tbl_count(files),
-        abs
+        abs,
+        suffix
       )
     )
+    if archived > 0 then
+      require('margin.render').schedule()
+    end
   else
     show(markdown)
   end

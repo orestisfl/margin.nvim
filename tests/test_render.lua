@@ -137,6 +137,41 @@ T['toggle_inline']['off removes boxes, on restores, signs persist'] = function()
   eq(row_of(panes(), 'right', 'toggle note') ~= nil, true)
 end
 
+T['archive'] = MiniTest.new_set()
+
+T['archive']['hides archived comments by default, sign gone too'] = function()
+  local ba = open_diff({ 'aa', 'bb', 'cc' }, { 'aa', 'bb', 'cc' })
+  child.lua(('S.add(%d, 2, 2, "handed off"); A.on_buf_load(%d); R.redraw()'):format(ba, ba))
+  -- box + sign present while active
+  eq(row_of(panes(), 'right', 'handed off') ~= nil, true)
+  eq(row_of(panes(), 'right', '┃') ~= nil, true)
+
+  child.lua(([[
+    local sess = S.for_buf(%d)
+    S.set_archived(sess, sess.comments[1], true)
+    R.redraw()
+  ]]):format(ba))
+  local rows = panes()
+  -- hidden: no box text, no sign
+  eq(row_of(rows, 'right', 'handed off'), nil)
+  eq(row_of(rows, 'right', '┃'), nil)
+end
+
+T['archive']['show_archived renders the full dimmed box with a tag'] = function()
+  local ba = open_diff({ 'aa', 'bb', 'cc' }, { 'aa', 'bb', 'cc' })
+  child.lua(([[
+    S.add(%d, 2, 2, "handed off"); A.on_buf_load(%d)
+    local sess = S.for_buf(%d)
+    S.set_archived(sess, sess.comments[1], true)
+    require('margin.actions').toggle_archived()
+  ]]):format(ba, ba, ba))
+  local rows = panes()
+  -- full body shown again, plus the (archived) tag, plus the sign
+  eq(row_of(rows, 'right', 'handed off') ~= nil, true)
+  eq(row_of(rows, 'right', 'archived') ~= nil, true)
+  eq(row_of(rows, 'right', '┃') ~= nil, true)
+end
+
 T['orphan'] = MiniTest.new_set()
 
 T['orphan']['renders a stale line, not a box'] = function()

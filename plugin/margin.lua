@@ -18,14 +18,23 @@ local subcommands = {
   delete = function()
     require('margin.actions').delete()
   end,
-  list = function()
-    require('margin.qf').list()
+  list = function(a)
+    require('margin.qf').list(a.bang)
   end,
   export = function(a)
-    require('margin.export').run(a.fargs[2])
+    require('margin.actions').export(a.fargs[2], a.bang)
+  end,
+  archive = function()
+    require('margin.actions').archive()
+  end,
+  unarchive = function()
+    require('margin.actions').unarchive()
   end,
   inline = function()
     require('margin.actions').toggle_inline()
+  end,
+  archived = function()
+    require('margin.actions').toggle_archived()
   end,
   clear = function()
     require('margin.actions').clear()
@@ -44,10 +53,11 @@ vim.api.nvim_create_user_command('Margin', function(a)
 end, {
   nargs = '+',
   range = true,
+  bang = true,
   desc = 'margin.nvim',
   complete = function(arglead, cmdline)
     -- Only complete the first argument (the subcommand name).
-    if cmdline:match('^%s*Margin%s+%S*$') then
+    if cmdline:match('^%s*Margin!?%s+%S*$') then
       local names = vim.tbl_keys(subcommands)
       table.sort(names)
       return vim.tbl_filter(function(n)
@@ -94,10 +104,28 @@ local maps = {
       require('margin.qf').list()
     end,
   },
+  ['(margin-archive)'] = {
+    modes = { 'n' },
+    fn = function()
+      require('margin.actions').archive()
+    end,
+  },
+  ['(margin-unarchive)'] = {
+    modes = { 'n' },
+    fn = function()
+      require('margin.actions').unarchive()
+    end,
+  },
+  ['(margin-archived)'] = {
+    modes = { 'n' },
+    fn = function()
+      require('margin.actions').toggle_archived()
+    end,
+  },
   ['(margin-export)'] = {
     modes = { 'n' },
     fn = function()
-      require('margin.export').run()
+      require('margin.actions').export()
     end,
   },
   ['(margin-next)'] = {
