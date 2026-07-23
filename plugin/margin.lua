@@ -78,10 +78,8 @@ local maps = {
         vim.cmd('normal! \27')
         local line1 = vim.fn.line("'<")
         local line2 = vim.fn.line("'>")
-        require('margin.autocmds').setup()
         require('margin.actions').comment({ line1 = line1, line2 = line2 })
       else
-        require('margin.autocmds').setup()
         require('margin.actions').comment()
       end
     end,
@@ -142,6 +140,12 @@ local maps = {
   },
 }
 
+-- Every mapping installs the autocmds first, so lazy-loading on any of them
+-- (e.g. keys = { { ']m', '<Plug>(margin-next)' } }) activates margin fully.
 for lhs, spec in pairs(maps) do
-  vim.keymap.set(spec.modes, '<Plug>' .. lhs, spec.fn, { desc = 'margin ' .. lhs })
+  local fn = spec.fn
+  vim.keymap.set(spec.modes, '<Plug>' .. lhs, function()
+    require('margin.autocmds').setup()
+    fn()
+  end, { desc = 'margin ' .. lhs })
 end

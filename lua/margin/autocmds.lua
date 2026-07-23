@@ -36,6 +36,13 @@ function M.setup()
       require('margin.render').schedule()
     end,
   })
+
+  -- Catch up on buffers already open when margin loads. Under lazy-loading the
+  -- plugin activates after those buffers' BufReadPost has fired, so re-anchor
+  -- and render them here; new buffers are handled by the autocmds above.
+  vim.schedule(function()
+    require('margin.anchor').reanchor_all()
+  end)
 end
 
 return M

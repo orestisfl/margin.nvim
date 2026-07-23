@@ -27,6 +27,32 @@ lazy.nvim:
 
 `setup()` is optional; every command works with defaults.
 
+### Lazy-loading
+
+margin can load on demand. Any `<Plug>` mapping or `:Margin` command fully
+activates it, including a one-time pass that restores comments in buffers that
+were already open. Load on the keymaps:
+
+```lua
+{
+  'orestisfl/margin.nvim',
+  keys = {
+    { '<leader>mc', '<Plug>(margin-comment)', mode = { 'n', 'x' } },
+    { ']m', '<Plug>(margin-next)' },
+    { '[m', '<Plug>(margin-prev)' },
+  },
+  cmd = 'Margin',
+  opts = {},
+}
+```
+
+To restore comments on reopened diffs *without* first pressing a key, load on
+buffer-read instead:
+
+```lua
+{ 'orestisfl/margin.nvim', event = { 'BufReadPost', 'BufWinEnter' }, opts = {} }
+```
+
 ## Suggested keymaps
 
 No default keymaps are created. Copy this block:
