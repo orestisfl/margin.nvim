@@ -3,10 +3,8 @@
 Leave local code reviews on top of any Neovim buffer and export them with enough
 context to paste into an AI coding agent.
 
-margin.nvim is **attach-only**: it never opens diffs, windows, or scratch
-buffers. You set up diffs however you like (`nvim -d a b`, `:diffthis`, a git
-plugin's diff-split) and margin renders on top. It never modifies buffer text,
-only decorations.
+margin.nvim is attach-only and doesn't open diffs. You set up diffs however you
+like and margin renders on top.
 
 ## Features
 
@@ -15,8 +13,8 @@ only decorations.
 - **Inline rendering** as virtual-line boxes under the commented line.
 - **Persistence** across restarts, keyed by project root, stored as JSON.
 - **Navigation** via the quickfix list plus next/prev-comment motions.
-- **Export** to clipboard or file as a fixed markdown format with per-comment
-  diff hunks or code snippets.
+- **Export** to a scratch buffer or file as a fixed markdown format with
+  per-comment diff hunks or code snippets.
 
 ## Install
 
@@ -51,7 +49,7 @@ map('n', '[m', '<Plug>(margin-prev)')
 | `:Margin edit` | Edit the comment under the cursor |
 | `:Margin delete` | Delete the comment under the cursor |
 | `:Margin list` | Open the quickfix list with all comments |
-| `:Margin export [path]` | Export markdown to clipboard, or to a file |
+| `:Margin export [path]` | Export markdown to a scratch split, or to a file |
 | `:Margin inline` | Toggle inline boxes (signs stay) |
 | `:Margin clear` | Delete all comments (after confirmation) |
 
@@ -96,6 +94,9 @@ This retry loop never backs off.
 In a live diff window the context is the relevant unified-diff hunk; elsewhere
 it is the commented lines plus context, fenced with the file's language.
 
+Without a path the markdown opens in a `margin://export` scratch split, ready
+to edit, yank, or `:w file`. Re-exporting replaces its contents.
+
 ## Manual QA checklist
 
 1. `nvim -d a.txt b.txt`; comment on a line on each side; both panes stay
@@ -106,10 +107,11 @@ it is the commented lines plus context, fenced with the file's language.
 5. Quit and reopen the same diff; comments are restored at the right lines.
 6. Edit a commented file outside Neovim (move the line); reopen; the comment
    relocates or is marked `(stale)`.
-7. `:Margin export` lands valid markdown on the clipboard.
+7. `:Margin export` opens valid markdown in a scratch split; re-export reuses
+   it.
 8. Comment in a plain (non-diff) buffer; export uses a code snippet.
 9. `:Margin toggle` hides boxes but keeps signs.
-10. `:checkhealth margin` reports version, clipboard, data dir, session count.
+10. `:checkhealth margin` reports version, data dir, session count.
 
 ## Development
 

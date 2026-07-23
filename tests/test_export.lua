@@ -138,6 +138,58 @@ T['orphan']['orphaned comment notes stale position'] = function()
   eq(md:find('(position may be stale)', 1, true) ~= nil, true)
 end
 
+T['buffer'] = MiniTest.new_set()
+
+T['buffer']['run opens the markdown in a scratch split'] = function()
+  local res = child.lua_get([[(function()
+    vim.fn.writefile({ 'l1', 'l2' }, _G.tmp .. '/s.txt')
+    vim.cmd('edit ' .. _G.tmp .. '/s.txt')
+    local buf = vim.api.nvim_get_current_buf()
+    S.add(buf, 1, 1, 'note')
+    A.on_buf_load(buf)
+    local md = E.run()
+    local cur = vim.api.nvim_get_current_buf()
+    return {
+      name = vim.api.nvim_buf_get_name(cur),
+      filetype = vim.bo[cur].filetype,
+      buftype = vim.bo[cur].buftype,
+      text = table.concat(vim.api.nvim_buf_get_lines(cur, 0, -1, false), '\n') .. '\n',
+      md = md,
+      wins = #vim.api.nvim_list_wins(),
+    }
+  end)()]])
+  eq(res.name, 'margin://export')
+  eq(res.filetype, 'markdown')
+  eq(res.buftype, 'nofile')
+  eq(res.text, res.md)
+  eq(res.wins, 2)
+end
+
+T['buffer']['re-export reuses the scratch buffer and window'] = function()
+  local res = child.lua_get([[(function()
+    vim.fn.writefile({ 'l1', 'l2' }, _G.tmp .. '/s.txt')
+    vim.cmd('edit ' .. _G.tmp .. '/s.txt')
+    local buf = vim.api.nvim_get_current_buf()
+    S.add(buf, 1, 1, 'note')
+    A.on_buf_load(buf)
+    E.run()
+    local first = vim.api.nvim_get_current_buf()
+    vim.cmd('wincmd p')
+    S.add(buf, 2, 2, 'second note')
+    local md = E.run()
+    local cur = vim.api.nvim_get_current_buf()
+    return {
+      same_buf = cur == first,
+      wins = #vim.api.nvim_list_wins(),
+      has_second = vim.fn.stridx(
+        table.concat(vim.api.nvim_buf_get_lines(cur, 0, -1, false), '\n'), 'second note') >= 0,
+    }
+  end)()]])
+  eq(res.same_buf, true)
+  eq(res.wins, 2)
+  eq(res.has_second, true)
+end
+
 T['empty'] = MiniTest.new_set()
 
 T['empty']['export of empty session returns empty string and warns'] = function()

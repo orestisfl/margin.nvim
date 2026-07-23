@@ -188,8 +188,43 @@ function M.render(sess)
   return table.concat(parts, '\n\n') .. '\n'
 end
 
---- Export the current session. With `path`, writes a file; otherwise copies
---- to the `+` and unnamed registers. Returns the rendered markdown.
+local BUFNAME = 'margin://export'
+
+--- The existing export scratch buffer, if any.
+---@return integer|nil
+local function export_buf()
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_get_name(buf) == BUFNAME then
+      return buf
+    end
+  end
+  return nil
+end
+
+--- Show the markdown in the export scratch buffer, in a split below.
+--- Re-exporting reuses the buffer (and its window when still visible).
+---@param markdown string
+local function show(markdown)
+  local buf = export_buf()
+  if not buf then
+    buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_name(buf, BUFNAME)
+    vim.bo[buf].bufhidden = 'wipe'
+    vim.bo[buf].filetype = 'markdown'
+  end
+  local text = markdown:gsub('\n$', '')
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(text, '\n', { plain = true }))
+
+  local win = vim.fn.win_findbuf(buf)[1]
+  if win then
+    vim.api.nvim_set_current_win(win)
+  else
+    vim.api.nvim_open_win(buf, true, { split = 'below', win = -1 })
+  end
+end
+
+--- Export the current session. With `path`, writes a file; otherwise opens
+--- the markdown in a scratch split. Returns the rendered markdown.
 ---@param path string|nil
 ---@return string markdown
 function M.run(path)
@@ -201,24 +236,22 @@ function M.run(path)
 
   local markdown = M.render(sess)
 
-  local files = {}
-  for _, c in ipairs(sess.comments) do
-    files[c.path] = true
-  end
-  local file_count = vim.tbl_count(files)
-
   if path and path ~= '' then
+    local files = {}
+    for _, c in ipairs(sess.comments) do
+      files[c.path] = true
+    end
     local abs = vim.fn.fnamemodify(path, ':p')
     vim.fn.writefile(vim.split(markdown, '\n', { plain = true }), abs)
     vim.notify(
-      ('margin: exported %d comments (%d files) to %s'):format(#sess.comments, file_count, abs)
+      ('margin: exported %d comments (%d files) to %s'):format(
+        #sess.comments,
+        vim.tbl_count(files),
+        abs
+      )
     )
   else
-    vim.fn.setreg('+', markdown)
-    vim.fn.setreg('"', markdown)
-    vim.notify(
-      ('margin: exported %d comments (%d files) to clipboard'):format(#sess.comments, file_count)
-    )
+    show(markdown)
   end
 
   return markdown

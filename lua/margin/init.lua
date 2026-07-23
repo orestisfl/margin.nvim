@@ -54,7 +54,7 @@ function M.clear()
 end
 
 --- Export the current session as markdown.
---- With a path, writes to that file; otherwise copies to the clipboard.
+--- With a path, writes to that file; otherwise opens a scratch split.
 ---@param path string|nil
 ---@return string markdown
 function M.export(path)

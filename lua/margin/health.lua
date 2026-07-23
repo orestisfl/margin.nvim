@@ -12,12 +12,6 @@ function M.check()
     vim.health.error('margin.nvim requires Neovim 0.12+')
   end
 
-  if vim.fn.has('clipboard') == 1 then
-    vim.health.ok('clipboard provider available')
-  else
-    vim.health.warn('no clipboard provider; export still works via file or register')
-  end
-
   local dir = config.data_dir()
   local count = 0
   if vim.fn.isdirectory(dir) == 1 then

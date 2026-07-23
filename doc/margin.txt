@@ -20,10 +20,10 @@ CONTENTS                                                       *margin-contents*
 margin.nvim adds local review comments to any Neovim buffer. It shows each
 comment below its selected lines.
 
-margin.nvim is attach-only. It never creates diff views, windows, or scratch
-buffers: you set up diffs however you like (`nvim -d a b`, |:diffthis|, a git
-plugin) and margin renders on top. It is read-only with respect to buffer
-text; it only adds decorations (extmarks, signs, virtual lines).
+margin.nvim is attach-only. It never creates diff views: you set up diffs
+however you like (`nvim -d a b`, |:diffthis|, a git plugin) and margin renders
+on top. It is read-only with respect to buffer text; it only adds decorations
+(extmarks, signs, virtual lines).
 
 ==============================================================================
 2. REQUIREMENTS                                            *margin-requirements*
@@ -57,9 +57,9 @@ With lazy.nvim: >lua
 :Margin edit            Edit the comment under the cursor.
 :Margin delete          Delete the comment under the cursor.
 :Margin list            Populate and open the quickfix list with all comments.
-:Margin export [path]   Export the session as markdown. Without a path, copies
-                        to the system clipboard and unnamed register; with a
-                        path, writes that file. See |margin-export|.
+:Margin export [path]   Export the session as markdown. Without a path, opens
+                        the markdown in a scratch split; with a path, writes
+                        that file. See |margin-export|.
 :Margin inline          Toggle inline comment boxes (signs remain).
 :Margin clear           Delete ALL comments in the session, after confirming.
 
@@ -139,7 +139,10 @@ hunk (fenced `diff`); elsewhere it is the commented lines plus context lines
 (fenced with the file's language). Old-side comments append ` (old version)`
 to the header; orphaned comments append `(position may be stale)` to the body.
 
-`require('margin').export()` returns the markdown string.
+Without a path argument the markdown opens in a `margin://export` scratch
+split (filetype markdown), ready to edit, yank, or `:w file`. Re-exporting
+replaces its contents. `require('margin').export()` returns the markdown
+string.
 
 ==============================================================================
 8. DIFF ALIGNMENT                                             *margin-alignment*
@@ -167,7 +170,7 @@ with the orphan style.
 ==============================================================================
 10. HEALTH                                                       *margin-health*
 
-Run `:checkhealth margin` to verify the Neovim version, clipboard provider,
-and report the resolved data directory and stored session count.
+Run `:checkhealth margin` to verify the Neovim version and report the
+resolved data directory and stored session count.
 
 vim:tw=78:ts=8:ft=help:norl:
