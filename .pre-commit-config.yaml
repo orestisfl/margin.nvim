@@ -1,0 +1,48 @@
+# Local pre-commit hooks. Install once with `pre-commit install`.
+# Requires on PATH: stylua, selene, lua-language-server, nvim.
+repos:
+  - repo: local
+    hooks:
+      - id: stylua
+        name: stylua (format)
+        entry: stylua
+        language: system
+        types: [lua]
+
+      - id: selene
+        name: selene (lint)
+        entry: selene
+        language: system
+        types: [lua]
+        pass_filenames: false
+        args: [lua, plugin]
+
+      - id: lua-ls
+        name: lua-language-server (typecheck)
+        entry: ./scripts/typecheck.sh
+        language: script
+        types: [lua]
+        pass_filenames: false
+
+      - id: tests
+        name: mini.test suites
+        entry: ./scripts/test.sh
+        language: script
+        pass_filenames: false
+        files: \.(lua)$
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^deps/
+      - id: end-of-file-fixer
+        exclude: ^deps/
+      - id: check-yaml
+      - id: check-merge-conflict
+
+  - repo: https://github.com/rvben/rumdl-pre-commit
+    rev: v0.2.55
+    hooks:
+      - id: rumdl
+        args: [--fix]

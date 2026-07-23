@@ -1,0 +1,173 @@
+*margin.txt*                        Local code-review comments in the margin
+
+==============================================================================
+CONTENTS                                                       *margin-contents*
+
+  1. Introduction ....................... |margin-introduction|
+  2. Requirements ....................... |margin-requirements|
+  3. Setup .............................. |margin-setup|
+  4. Commands ........................... |margin-commands|
+  5. Mappings ........................... |margin-mappings|
+  6. Configuration ...................... |margin-config|
+  7. Export format ...................... |margin-export|
+  8. Diff alignment ..................... |margin-alignment|
+  9. Persistence ........................ |margin-persistence|
+  10. Health ............................ |margin-health|
+
+==============================================================================
+1. INTRODUCTION                                            *margin-introduction*
+
+margin.nvim adds local review comments to any Neovim buffer. It shows each
+comment below its selected lines.
+
+margin.nvim is attach-only. It never creates diff views, windows, or scratch
+buffers: you set up diffs however you like (`nvim -d a b`, |:diffthis|, a git
+plugin) and margin renders on top. It is read-only with respect to buffer
+text; it only adds decorations (extmarks, signs, virtual lines).
+
+==============================================================================
+2. REQUIREMENTS                                            *margin-requirements*
+
+- Neovim 0.12 or newer.
+- No runtime dependencies.
+
+==============================================================================
+3. SETUP                                                          *margin-setup*
+
+Calling |setup()| is optional; every command works with defaults. >lua
+
+    require('margin').setup({
+      inline = true,
+      max_width = 80,
+      context_lines = 3,
+      sign_text = '┃',
+      data_dir = nil,
+    })
+<
+With lazy.nvim: >lua
+
+    { 'orestisfl/margin.nvim', opts = {} }
+<
+==============================================================================
+4. COMMANDS                                                    *margin-commands*
+
+                                                                      *:Margin*
+:Margin comment         Comment on the current line. In visual mode or with a
+                        range, comment on the range.
+:Margin edit            Edit the comment under the cursor.
+:Margin delete          Delete the comment under the cursor.
+:Margin list            Populate and open the quickfix list with all comments.
+:Margin export [path]   Export the session as markdown. Without a path, copies
+                        to the system clipboard and unnamed register; with a
+                        path, writes that file. See |margin-export|.
+:Margin inline          Toggle inline comment boxes (signs remain).
+:Margin clear           Delete ALL comments in the session, after confirming.
+
+"Under the cursor" means the cursor line falls within a comment's line range.
+When several overlap, the innermost (smallest range) is chosen.
+
+==============================================================================
+5. MAPPINGS                                                    *margin-mappings*
+
+No default keymaps are created. The following <Plug> mappings are provided: >
+
+    <Plug>(margin-comment)   n and x mode
+    <Plug>(margin-edit)
+    <Plug>(margin-delete)
+    <Plug>(margin-list)
+    <Plug>(margin-export)
+    <Plug>(margin-next)      jump to next comment in buffer (wraps)
+    <Plug>(margin-prev)
+<
+Suggested bindings: >lua
+
+    local map = vim.keymap.set
+    map({ 'n', 'x' }, '<leader>mc', '<Plug>(margin-comment)')
+    map('n', '<leader>me', '<Plug>(margin-edit)')
+    map('n', '<leader>md', '<Plug>(margin-delete)')
+    map('n', '<leader>ml', '<Plug>(margin-list)')
+    map('n', '<leader>mx', '<Plug>(margin-export)')
+    map('n', ']m', '<Plug>(margin-next)')
+    map('n', '[m', '<Plug>(margin-prev)')
+<
+COMPOSER                                                       *margin-composer*
+
+Comments are composed in a centered floating window (filetype markdown, full
+modal editing, multi-line). Save with `:w` or <C-s>; abort by closing the
+window or pressing `q` in normal mode. Empty text aborts creation and leaves
+an edited comment unchanged. Trailing blank lines are trimmed.
+
+==============================================================================
+6. CONFIGURATION                                                 *margin-config*
+
+                                                              *margin.Config*
+inline          (boolean, default true)
+                Render inline comment boxes with |virt_lines|. When off, only
+                signs mark commented lines. Toggle at runtime with |:Margin|
+                inline.
+
+max_width       (integer, default 80)
+                Wrap width for comment box text.
+
+context_lines   (integer, default 3)
+                Lines of context in export snippets and the |ctxlen| passed to
+                the diff engine for export hunks.
+
+sign_text       (string, default '┃')
+                Sign-column indicator for commented lines.
+
+data_dir        (string|nil, default nil)
+                Override the session storage directory. Defaults to
+                `stdpath('data')/margin`.
+
+HIGHLIGHTS                                                   *margin-highlights*
+
+Defined with `default = true` links; override freely: >
+
+    MarginSign    -> DiagnosticSignInfo
+    MarginComment -> Comment
+    MarginBorder  -> FloatBorder
+    MarginOrphan  -> DiagnosticWarn
+<
+==============================================================================
+7. EXPORT FORMAT                                                 *margin-export*
+
+`:Margin export` renders the whole session to a fixed markdown format: a short
+preamble, one `## path:line` anchored section per comment, and a fenced
+context block. In a live diff window the block is the relevant unified-diff
+hunk (fenced `diff`); elsewhere it is the commented lines plus context lines
+(fenced with the file's language). Old-side comments append ` (old version)`
+to the header; orphaned comments append `(position may be stale)` to the body.
+
+`require('margin').export()` returns the markdown string.
+
+==============================================================================
+8. DIFF ALIGNMENT                                             *margin-alignment*
+
+When a comment is rendered inline in one pane of a native two-window diff, an
+equal-height block of blank filler is placed at the mapped counterpart line in
+the other pane so the two panes stay vertically aligned. This holds for
+comments on context lines, on added lines (coexisting with native diff
+filler), and at the top of the buffer.
+
+With more than two diff windows (3-way merge) the first counterpart is used.
+
+==============================================================================
+9. PERSISTENCE                                               *margin-persistence*
+
+Comments survive restarts, keyed by project root (detected via a `.git`
+marker, falling back to the working directory; git is never invoked). Sessions
+are stored as JSON under |margin-config| `data_dir`, one file per root.
+
+Comments re-anchor by content matching on buffer load: an exact match at the
+stored line wins; otherwise a unique match within 40 lines relocates the
+comment; otherwise it is flagged orphaned (never silently dropped) and shown
+with the orphan style.
+
+==============================================================================
+10. HEALTH                                                       *margin-health*
+
+Run `:checkhealth margin` to verify the Neovim version, clipboard provider,
+and report the resolved data directory and stored session count.
+
+vim:tw=78:ts=8:ft=help:norl:

@@ -1,0 +1,117 @@
+local session = require('margin.session')
+
+local M = {}
+
+--- First line of a comment body (quickfix shows one line per comment).
+---@param comment margin.Comment
+---@return string
+local function first_line(comment)
+  local line = vim.split(comment.text, '\n', { plain = true })[1] or ''
+  if comment.orphaned then
+    return '[stale] ' .. line
+  end
+  return line
+end
+
+--- Absolute path for a comment's stored (root-relative or absolute) path.
+---@param sess margin.Session
+---@param comment margin.Comment
+---@return string
+local function abspath(sess, comment)
+  if comment.path:sub(1, 1) == '/' then
+    return comment.path
+  end
+  return sess.root .. '/' .. comment.path
+end
+
+--- Populate and open the quickfix list with all comments in the session.
+function M.list()
+  local sess = session.for_buf(vim.api.nvim_get_current_buf())
+  if #sess.comments == 0 then
+    vim.notify('margin: no comments', vim.log.levels.INFO)
+    return
+  end
+
+  local items = {}
+  for _, c in ipairs(sess.comments) do
+    items[#items + 1] = {
+      filename = abspath(sess, c),
+      lnum = c.lnum,
+      text = first_line(c),
+    }
+  end
+  table.sort(items, function(a, b)
+    if a.filename == b.filename then
+      return a.lnum < b.lnum
+    end
+    return a.filename < b.filename
+  end)
+
+  vim.fn.setqflist({}, ' ', { title = 'margin comments', items = items })
+  vim.cmd('copen')
+end
+
+--- Comments in the current buffer sorted by their live line position.
+---@return integer buf
+---@return margin.Comment[]
+---@return table<string, integer> id -> live lnum
+local function current_buffer_comments()
+  local buf = vim.api.nvim_get_current_buf()
+  local path = session.path_for_buf(buf)
+  if not path then
+    return buf, {}, {}
+  end
+  local sess = session.for_buf(buf)
+  local anchor = require('margin.anchor')
+  local comments = session.comments_for_path(sess, path)
+  local live = {}
+  for _, c in ipairs(comments) do
+    live[c.id] = (anchor.range(buf, c))
+  end
+  table.sort(comments, function(a, b)
+    return live[a.id] < live[b.id]
+  end)
+  return buf, comments, live
+end
+
+--- Jump toward the next/previous comment in the current buffer (wraps).
+---@param dir 1|-1
+local function jump(dir)
+  local _, comments, live = current_buffer_comments()
+  if #comments == 0 then
+    vim.notify('margin: no comments in buffer', vim.log.levels.INFO)
+    return
+  end
+  local cur = vim.api.nvim_win_get_cursor(0)[1]
+
+  local target
+  if dir == 1 then
+    for _, c in ipairs(comments) do
+      if live[c.id] > cur then
+        target = c
+        break
+      end
+    end
+    target = target or comments[1] -- wrap to first
+  else
+    for i = #comments, 1, -1 do
+      if live[comments[i].id] < cur then
+        target = comments[i]
+        break
+      end
+    end
+    target = target or comments[#comments] -- wrap to last
+  end
+
+  vim.api.nvim_win_set_cursor(0, { live[target.id], 0 })
+end
+
+function M.next()
+  jump(1)
+end
+
+function M.prev()
+  jump(-1)
+end
+
+return M

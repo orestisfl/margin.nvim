@@ -1,0 +1,5 @@
+std = "neovim"
+
+[lints]
+# mini.test uses global assignment patterns in test files; allow shadowing.
+mixed_table = "warn"

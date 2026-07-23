@@ -1,0 +1,8 @@
+# Selene standard library for Neovim's Lua runtime.
+# Extends lua51 (LuaJIT is 5.1-compatible) and exposes `vim` as a permissive
+# global so plugin code linting does not require the full API surface.
+base: lua51
+
+globals:
+  vim:
+    any: true
