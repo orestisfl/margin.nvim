@@ -137,6 +137,23 @@ T['toggle_inline']['off removes boxes, on restores, signs persist'] = function()
   eq(row_of(panes(), 'right', 'toggle note') ~= nil, true)
 end
 
+T['deduplication'] = MiniTest.new_set()
+
+T['deduplication']['one buffer in two windows gets one box extmark'] = function()
+  local count = child.lua_get([[(function()
+    vim.fn.writefile({ 'aa', 'bb', 'cc' }, _G.tmp .. '/shared.txt')
+    vim.cmd('edit ' .. _G.tmp .. '/shared.txt')
+    local buf = vim.api.nvim_get_current_buf()
+    S.add(buf, 2, 2, 'shown once')
+    A.on_buf_load(buf)
+    vim.cmd('split')
+    R.redraw()
+    return #vim.api.nvim_buf_get_extmarks(buf, R.ns_box, 0, -1, {})
+  end)()]])
+
+  eq(count, 1)
+end
+
 T['archive'] = MiniTest.new_set()
 
 T['archive']['hides archived comments by default, sign gone too'] = function()

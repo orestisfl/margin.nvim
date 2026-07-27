@@ -97,17 +97,24 @@ local function blank_lines(n)
   return out
 end
 
---- Windows in a tabpage mapped to their (unique) buffers.
+--- Visible buffers in a tabpage, with every window showing each buffer.
 ---@param tab integer
----@return table<integer, integer> win -> buf
-local function tab_windows(tab)
-  local map = {}
+---@return table<integer, { wins: integer[], width: integer }> buf -> view
+local function tab_buffers(tab)
+  local buffers = {}
   for _, w in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
     if vim.api.nvim_win_is_valid(w) then
-      map[w] = vim.api.nvim_win_get_buf(w)
+      local buf = vim.api.nvim_win_get_buf(w)
+      local view = buffers[buf]
+      if not view then
+        view = { wins = {}, width = vim.api.nvim_win_get_width(w) }
+        buffers[buf] = view
+      end
+      view.wins[#view.wins + 1] = w
+      view.width = math.min(view.width, vim.api.nvim_win_get_width(w))
     end
   end
-  return map
+  return buffers
 end
 
 --- Rebuild all comment boxes and mirrored filler for a tabpage.
@@ -116,37 +123,41 @@ end
 ---@param tab integer
 local function rebuild(tab)
   highlights.ensure()
-  local wins = tab_windows(tab)
+  local buffers = tab_buffers(tab)
 
   -- Pass 1: clear box + filler namespaces in every visible buffer.
-  local cleared = {}
-  for _, buf in pairs(wins) do
-    if not cleared[buf] and vim.api.nvim_buf_is_valid(buf) then
+  for buf in pairs(buffers) do
+    if vim.api.nvim_buf_is_valid(buf) then
       vim.api.nvim_buf_clear_namespace(buf, M.ns_box, 0, -1)
       vim.api.nvim_buf_clear_namespace(buf, M.ns_filler, 0, -1)
-      cleared[buf] = true
     end
   end
 
   if not config.current.inline then
     -- Signs still come from anchor marks; just ensure they exist.
-    for _, buf in pairs(wins) do
+    for buf in pairs(buffers) do
       anchor.ensure(buf)
     end
     return
   end
 
   -- Pass 2: place boxes and filler.
-  for win, buf in pairs(wins) do
+  for buf, view in pairs(buffers) do
     local path = session.path_for_buf(buf)
     if path then
       local sess = session.for_buf(buf)
       local comments = session.comments_for_path(sess, path)
       if #comments > 0 then
         anchor.ensure(buf)
-        local width = math.min(config.current.max_width, vim.api.nvim_win_get_width(win) - 4)
-        local cp = vim.wo[win].diff and diffmap.counterpart(win) or nil
+        local width = math.min(config.current.max_width, view.width - 4)
         local line_count = vim.api.nvim_buf_line_count(buf)
+        local counterparts = {}
+        for _, win in ipairs(view.wins) do
+          local cp = vim.wo[win].diff and diffmap.counterpart(win) or nil
+          if cp and vim.api.nvim_buf_is_valid(cp.buf) then
+            counterparts[cp.buf] = true
+          end
+        end
 
         for _, comment in ipairs(comments) do
           if config.visible(comment) then
@@ -159,11 +170,11 @@ local function rebuild(tab)
               virt_lines_above = false,
             })
 
-            if cp and vim.api.nvim_buf_is_valid(cp.buf) then
-              local m = diffmap.map(cp.buf, buf, end_lnum)
-              local cp_count = vim.api.nvim_buf_line_count(cp.buf)
+            for cp_buf in pairs(counterparts) do
+              local m = diffmap.map(cp_buf, buf, end_lnum)
+              local cp_count = vim.api.nvim_buf_line_count(cp_buf)
               local cp_row = math.max(0, math.min(m.line - 1, cp_count - 1))
-              vim.api.nvim_buf_set_extmark(cp.buf, M.ns_filler, cp_row, 0, {
+              vim.api.nvim_buf_set_extmark(cp_buf, M.ns_filler, cp_row, 0, {
                 virt_lines = blank_lines(#vt),
                 virt_lines_above = m.placement == 'above',
               })
