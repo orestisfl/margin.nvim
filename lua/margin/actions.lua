@@ -143,9 +143,9 @@ function M.toggle_archived()
   require('margin.render').redraw()
 end
 
---- Export the session, prompting before a file export archives its comments.
---- Declining (Esc / No) keeps them active for a re-export. The preview split
---- (no path) and `include_archived` re-dumps never archive, so never prompt.
+--- Export the session. File exports prompt before archiving; scratch previews
+--- prompt when closed. Declining (Esc / No) keeps comments active for a
+--- re-export. `include_archived` re-dumps never archive or prompt.
 ---@param path string|nil
 ---@param include_archived boolean|nil
 ---@return string markdown

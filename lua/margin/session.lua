@@ -252,14 +252,19 @@ function M.set_archived(session, comment, archived)
   emit(session, 'archive')
 end
 
---- Archive every not-yet-archived comment. Used after a file export so the
---- next export omits what was already handed off.
+--- Archive the selected comments that are still present and active.
 ---@param session margin.Session
+---@param comments margin.Comment[]
 ---@return integer archived count newly archived
-function M.archive_active(session)
+function M.archive_comments(session, comments)
+  local selected = {}
+  for _, c in ipairs(comments) do
+    selected[c.id] = true
+  end
+
   local n = 0
   for _, c in ipairs(session.comments) do
-    if not c.archived then
+    if selected[c.id] and not c.archived then
       c.archived = true
       n = n + 1
     end
@@ -269,6 +274,13 @@ function M.archive_active(session)
     emit(session, 'archive')
   end
   return n
+end
+
+--- Archive every not-yet-archived comment.
+---@param session margin.Session
+---@return integer archived count newly archived
+function M.archive_active(session)
+  return M.archive_comments(session, session.comments)
 end
 
 --- Remove a comment from its session.

@@ -195,6 +195,13 @@ end
 
 local BUFNAME = 'margin://export'
 
+---@class margin.ExportPreview
+---@field session margin.Session
+---@field comments margin.Comment[]
+
+---@type table<integer, margin.ExportPreview>
+local previews = {}
+
 --- The existing export scratch buffer, if any.
 ---@return integer|nil
 local function export_buf()
@@ -206,17 +213,57 @@ local function export_buf()
   return nil
 end
 
+--- Offer to archive the active comments represented by a closing preview.
+---@param buf integer
+local function close_preview(buf)
+  local preview = previews[buf]
+  previews[buf] = nil
+  if not preview then
+    return
+  end
+
+  local active = {}
+  local selected = {}
+  for _, c in ipairs(preview.comments) do
+    selected[c.id] = true
+  end
+  for _, c in ipairs(preview.session.comments) do
+    if selected[c.id] and not c.archived then
+      active[#active + 1] = c
+    end
+  end
+  if #active == 0 then
+    return
+  end
+
+  local choice = vim.fn.confirm(('Archive %d exported comments?'):format(#active), '&Yes\n&No', 1)
+  if choice == 1 and session.archive_comments(preview.session, active) > 0 then
+    require('margin.render').schedule()
+  end
+end
+
 --- Show the markdown in the export scratch buffer, in a split below.
 --- Re-exporting reuses the buffer (and its window when still visible).
 ---@param markdown string
-local function show(markdown)
+---@param sess margin.Session
+---@param exported margin.Comment[]
+---@param offer_archive boolean
+local function show(markdown, sess, exported, offer_archive)
   local buf = export_buf()
   if not buf then
     buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_name(buf, BUFNAME)
     vim.bo[buf].bufhidden = 'wipe'
     vim.bo[buf].filetype = 'markdown'
+    vim.api.nvim_create_autocmd('BufWipeout', {
+      buffer = buf,
+      callback = function(ev)
+        close_preview(ev.buf)
+      end,
+    })
   end
+  previews[buf] = offer_archive and { session = sess, comments = exported } or nil
+
   local text = markdown:gsub('\n$', '')
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(text, '\n', { plain = true }))
 
@@ -233,8 +280,8 @@ end
 ---
 --- Archived comments are excluded unless `include_archived` is set. When
 --- `archive` is set, the comments written are archived afterwards so the next
---- export omits them; the interactive prompt for this lives in the caller
---- (see |actions.export|), keeping this function non-interactive.
+--- export omits them. A scratch preview of active comments offers to archive
+--- the comments represented by its latest contents when the buffer closes.
 ---@param path string|nil
 ---@param include_archived boolean|nil
 ---@param archive boolean|nil archive the written comments after a file export
@@ -275,7 +322,7 @@ function M.run(path, include_archived, archive)
       require('margin.render').schedule()
     end
   else
-    show(markdown)
+    show(markdown, sess, exported, not include_archived)
   end
 
   return markdown

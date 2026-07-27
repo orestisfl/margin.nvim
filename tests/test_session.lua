@@ -180,6 +180,20 @@ T['archive']['archive_active archives only unarchived comments'] = function()
   eq(res.second, 0)
 end
 
+T['archive']['archive_comments archives only the selected comments'] = function()
+  local buf = open_file('a.txt', { 'a', 'b' })
+  local res = child.lua_get(([[(function()
+    local selected = S.add(%d, 1, 1, 'one')
+    local other = S.add(%d, 2, 2, 'two')
+    local sess = S.for_buf(%d)
+    local count = S.archive_comments(sess, { selected })
+    return { count = count, selected = selected.archived, other = other.archived }
+  end)()]]):format(buf, buf, buf))
+  eq(res.count, 1)
+  eq(res.selected, true)
+  eq(res.other, false)
+end
+
 T['persistence'] = MiniTest.new_set()
 
 T['persistence']['round-trips through JSON'] = function()

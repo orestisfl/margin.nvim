@@ -18,9 +18,13 @@ local T = MiniTest.new_set({
         E = require('margin.export')
         Act = require('margin.actions')
         S._reset(); A._reset()
-        -- Deterministic archive-confirm for Act.export: set _G.confirm_choice.
+        -- Deterministic archive confirms: set _G.confirm_choice.
         _G.confirm_choice = 1
-        vim.fn.confirm = function() return _G.confirm_choice end
+        _G.confirm_calls = 0
+        vim.fn.confirm = function()
+          _G.confirm_calls = _G.confirm_calls + 1
+          return _G.confirm_choice
+        end
       ]])
     end,
     post_case = function()
@@ -261,17 +265,58 @@ T['archive']['declining the confirm keeps comments active'] = function()
   eq(res.has, true)
 end
 
-T['archive']['preview split does not archive'] = function()
+T['archive']['closing a preview archives only the comments it exported'] = function()
   local res = child.lua_get([[(function()
     vim.fn.writefile({ 'a', 'b' }, _G.tmp .. '/f.txt')
     vim.cmd('edit ' .. _G.tmp .. '/f.txt')
     local buf = vim.api.nvim_get_current_buf()
     S.add(buf, 1, 1, 'preview me')
     A.on_buf_load(buf)
-    E.run()  -- no path: scratch split, non-destructive
+    E.run()
+    S.add(buf, 2, 2, 'added after preview')
+    vim.cmd('quit')
+    local comments = S.for_buf(buf).comments
+    return {
+      exported = comments[1].archived,
+      added_later = comments[2].archived,
+      confirms = _G.confirm_calls,
+    }
+  end)()]])
+  eq(res.exported, true)
+  eq(res.added_later, false)
+  eq(res.confirms, 1)
+end
+
+T['archive']['declining the preview close confirm keeps comments active'] = function()
+  local res = child.lua_get([[(function()
+    vim.fn.writefile({ 'a' }, _G.tmp .. '/f.txt')
+    vim.cmd('edit ' .. _G.tmp .. '/f.txt')
+    local buf = vim.api.nvim_get_current_buf()
+    S.add(buf, 1, 1, 'keep active')
+    A.on_buf_load(buf)
+    _G.confirm_choice = 2
+    E.run()
+    vim.cmd('quit')
     return S.for_buf(buf).comments[1].archived
   end)()]])
   eq(res, false)
+end
+
+T['archive']['bang preview closes without an archive prompt'] = function()
+  local res = child.lua_get([[(function()
+    vim.fn.writefile({ 'a' }, _G.tmp .. '/f.txt')
+    vim.cmd('edit ' .. _G.tmp .. '/f.txt')
+    local buf = vim.api.nvim_get_current_buf()
+    local c = S.add(buf, 1, 1, 'archived note')
+    A.on_buf_load(buf)
+    local sess = S.for_buf(buf)
+    S.set_archived(sess, c, true)
+    E.run(nil, true)
+    vim.cmd('quit')
+    return { archived = c.archived, confirms = _G.confirm_calls }
+  end)()]])
+  eq(res.archived, true)
+  eq(res.confirms, 0)
 end
 
 T['archive']['bang file export does not re-archive'] = function()

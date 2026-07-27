@@ -73,8 +73,9 @@ end
 --- Export the current session as markdown.
 --- With a path, writes to that file and archives the comments written (no
 --- prompt; the interactive `:Margin export` asks first). Otherwise opens a
---- scratch split. Archived comments are excluded, and archiving is skipped,
---- unless `include_archived` is set.
+--- scratch split that offers to archive its comments when closed. Archived
+--- comments are excluded unless `include_archived` is set; an inclusive export
+--- archives nothing.
 ---@param path string|nil
 ---@param include_archived boolean|nil
 ---@return string markdown

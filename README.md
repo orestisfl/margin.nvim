@@ -56,7 +56,7 @@ For example with lazy.nvim:
 | `:Margin edit` | Edit the comment under the cursor |
 | `:Margin delete` | Delete the comment under the cursor |
 | `:Margin list[!]` | Open the quickfix list; `!` includes archived comments |
-| `:Margin export[!] [path]` | Export markdown to a scratch split, or to a file (which offers to archive what it wrote); `!` includes archived and archives nothing |
+| `:Margin export[!] [path]` | Export markdown to a scratch split or file and offer to archive what it wrote; `!` includes archived and archives nothing |
 | `:Margin archive` | Archive the comment under the cursor |
 | `:Margin unarchive` | Unarchive the comment under the cursor |
 | `:Margin archived` | Toggle visibility of archived comments (dimmed) |
@@ -103,7 +103,8 @@ In a live diff window the context is the relevant unified-diff hunk; elsewhere
 it is the commented lines plus context, fenced with the file's language.
 
 Without a path the markdown opens in a `margin://export` scratch split, ready
-to edit, yank, or `:w file`. Re-exporting replaces its contents.
+to edit, yank, or `:w file`. Re-exporting replaces its contents. Closing the
+buffer asks whether to archive the comments in its latest contents.
 
 ## Archiving
 
