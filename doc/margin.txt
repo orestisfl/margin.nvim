@@ -127,9 +127,10 @@ Suggested bindings: >lua
 COMPOSER                                                       *margin-composer*
 
 Comments are composed in a centered floating window (filetype markdown, full
-modal editing, multi-line). Save with `:w` or <C-s>; abort by closing the
-window or pressing `q` in normal mode. Empty text aborts creation and leaves
-an edited comment unchanged. Trailing blank lines are trimmed.
+modal editing, multi-line). Save with `:w` or <C-s>. Pressing `q` in normal
+mode discards empty text immediately; for non-empty text, it asks whether to
+save (default: Yes). Closing the window aborts. Empty text aborts creation and
+leaves an edited comment unchanged. Trailing blank lines are trimmed.
 
 ==============================================================================
 6. CONFIGURATION                                                 *margin-config*

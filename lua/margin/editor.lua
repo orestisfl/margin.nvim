@@ -54,10 +54,21 @@ function M.open(opts)
     if vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_win_close(win, true)
     end
+    if text == '' then
+      return
+    end
     opts.on_submit(text)
   end
 
   local function cancel()
+    local text = normalize(vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+    if text ~= '' then
+      local choice = vim.fn.confirm('Save this comment?', '&Yes\n&No', 1)
+      if choice == 1 then
+        submit()
+        return
+      end
+    end
     if vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_win_close(win, true)
     end

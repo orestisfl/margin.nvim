@@ -63,8 +63,7 @@ For example with lazy.nvim:
 | `:Margin inline` | Toggle inline boxes (signs stay) |
 | `:Margin clear` | Delete all comments (after confirmation) |
 
-In the composer: `:w` or `<C-s>` saves, `q` (normal mode) or closing the window
-aborts.
+In the composer, `:w` or `<C-s>` saves. `q` in normal mode aborts.
 
 ## Configuration
 
