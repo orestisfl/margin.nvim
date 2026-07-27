@@ -66,7 +66,11 @@ were already open. Load on the keymaps: >lua
 To restore comments on reopened diffs without first pressing a key, load on
 buffer-read instead: >lua
 
-    { 'orestisfl/margin.nvim', event = { 'BufReadPost', 'BufWinEnter' }, opts = {} }
+    {
+      'orestisfl/margin.nvim',
+      event = { 'BufReadPost', 'BufWinEnter' },
+      opts = {},
+    }
 <
 ==============================================================================
 4. COMMANDS                                                    *margin-commands*

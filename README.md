@@ -19,56 +19,33 @@ like and margin renders on top.
 
 ## Install
 
-lazy.nvim:
-
-```lua
-{ 'orestisfl/margin.nvim', opts = {} }
-```
-
-`setup()` is optional; every command works with defaults.
-
-### Lazy-loading
-
-margin can load on demand. Any `<Plug>` mapping or `:Margin` command fully
-activates it, including a one-time pass that restores comments in buffers that
-were already open. Load on the keymaps:
+For example with lazy.nvim:
 
 ```lua
 {
   'orestisfl/margin.nvim',
+  lazy = true, -- Set to false to show saved comments when Neovim starts.
   keys = {
     { '<leader>mc', '<Plug>(margin-comment)', mode = { 'n', 'x' } },
-    { ']m', '<Plug>(margin-next)' },
-    { '[m', '<Plug>(margin-prev)' },
+    { '<leader>me', '<Plug>(margin-edit)' },
+    { '<leader>md', '<Plug>(margin-delete)' },
+    { '<leader>ml', '<Plug>(margin-list)' },
+    { '<leader>mx', '<Plug>(margin-export)' },
+    { '<leader>ma', '<Plug>(margin-archive)' },
+    { '<leader>mA', '<Plug>(margin-unarchive)' },
+    { '<leader>mt', '<Plug>(margin-archived)' },
+    { ']m', '<Plug>(margin-next)', desc = 'Next margin comment' },
+    { '[m', '<Plug>(margin-prev)', desc = 'Previous margin comment' },
   },
-  cmd = 'Margin',
-  opts = {},
+  opts = { -- The default values:
+    inline = true,
+    show_archived = false,
+    max_width = 80,
+    context_lines = 3,
+    sign_text = '┃',
+    data_dir = nil,
+  },
 }
-```
-
-To restore comments on reopened diffs *without* first pressing a key, load on
-buffer-read instead:
-
-```lua
-{ 'orestisfl/margin.nvim', event = { 'BufReadPost', 'BufWinEnter' }, opts = {} }
-```
-
-## Suggested keymaps
-
-No default keymaps are created. Copy this block:
-
-```lua
-local map = vim.keymap.set
-map({ 'n', 'x' }, '<leader>mc', '<Plug>(margin-comment)')
-map('n', '<leader>me', '<Plug>(margin-edit)')
-map('n', '<leader>md', '<Plug>(margin-delete)')
-map('n', '<leader>ml', '<Plug>(margin-list)')
-map('n', '<leader>mx', '<Plug>(margin-export)')
-map('n', '<leader>ma', '<Plug>(margin-archive)')
-map('n', '<leader>mA', '<Plug>(margin-unarchive)')
-map('n', '<leader>mt', '<Plug>(margin-archived)')
-map('n', ']m', '<Plug>(margin-next)')
-map('n', '[m', '<Plug>(margin-prev)')
 ```
 
 ## Commands
@@ -91,16 +68,14 @@ aborts.
 
 ## Configuration
 
-```lua
-require('margin').setup({
-  inline = true,         -- render virtual-line comment boxes
-  show_archived = false, -- render archived comments (dimmed)
-  max_width = 80,        -- comment box wrap width
-  context_lines = 3,     -- export context / diff hunk ctxlen
-  sign_text = '┃',       -- sign-column indicator
-  data_dir = nil,        -- override stdpath('data')/margin
-})
-```
+| Option | Default | Description |
+| --- | --- | --- |
+| `inline` | `true` | Render virtual-line comment boxes |
+| `show_archived` | `false` | Render archived comments dimmed |
+| `max_width` | `80` | Maximum comment-box wrap width |
+| `context_lines` | `3` | Export context and diff hunk context |
+| `sign_text` | `┃` | Sign-column indicator |
+| `data_dir` | `nil` | Override `stdpath('data')/margin` |
 
 Highlight groups (override freely): `MarginSign`, `MarginComment`,
 `MarginBorder`, `MarginOrphan`, `MarginArchived`.
@@ -133,62 +108,11 @@ to edit, yank, or `:w file`. Re-exporting replaces its contents.
 
 ## Archiving
 
-Archiving stops you from handing off the same comment twice. Writing an export
-to a file (`:Margin export review.md`) asks whether to archive the comments it
-wrote; answer yes and the next file export contains only comments added since,
-or decline (Esc / No) to keep them active. The scratch-split preview (no path)
-never archives.
+Archived comments do not appear in normal lists or exports. They keep their
+positions and move when the related text moves.
 
-Archived comments are hidden by default and drop out of `:Margin export` and
-`:Margin list`, but keep their position and still re-anchor. `:Margin archived`
-toggles them visible, rendered dimmed with an `(archived)` tag; that's how you
-put the cursor on one to `:Margin unarchive` it. Visibility is independent of
-export: to include archived comments in output, add `!` (`:Margin list!`,
-`:Margin export!`), which archives nothing further.
+`:Margin archived` shows archived comments with dim text. Use `:Margin
+unarchive` to make the comment active again.
 
-Archive or unarchive the comment under the cursor with `:Margin archive` /
-`:Margin unarchive`.
-
-## Manual QA checklist
-
-1. `nvim -d a.txt b.txt`; comment on a line on each side; both panes stay
-   aligned.
-2. Comment on a visual range; header shows `path:lnum-end`.
-3. `:Margin list` opens the quickfix; entries jump to the right lines.
-4. `]m` / `[m` cycle comments and wrap.
-5. Quit and reopen the same diff; comments are restored at the right lines.
-6. Edit a commented file outside Neovim (move the line); reopen; the comment
-   relocates or is marked `(stale)`.
-7. `:Margin export` opens valid markdown in a scratch split; re-export reuses
-   it.
-8. Comment in a plain (non-diff) buffer; export uses a code snippet.
-9. `:Margin toggle` hides boxes but keeps signs.
-10. `:Margin export review.md`; answer yes at the prompt; the exported comments
-    vanish. `:Margin archived` shows them dimmed with an `(archived)` tag; a
-    second `:Margin export review.md` reports no comments. Answering no at the
-    prompt keeps them active.
-11. `:checkhealth margin` reports version, data dir, session count.
-
-## Development
-
-Tooling: [StyLua], [Selene], [lua-language-server], and [mini.test].
-
-```sh
-make fmt         # format
-make lint        # selene
-make typecheck   # lua-language-server --check
-make test        # mini.test suites
-make check       # all of the above (what pre-commit runs)
-```
-
-Install the git hooks with [pre-commit]:
-
-```sh
-pre-commit install
-```
-
-[StyLua]: https://github.com/JohnnyMorganz/StyLua
-[Selene]: https://github.com/Kampfkarren/selene
-[lua-language-server]: https://github.com/LuaLS/lua-language-server
-[mini.test]: https://github.com/echasnovski/mini.nvim
-[pre-commit]: https://pre-commit.com
+Add `!` to list or export archived comments. These commands do not change the
+archive state.
