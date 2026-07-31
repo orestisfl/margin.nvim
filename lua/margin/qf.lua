@@ -17,19 +17,7 @@ local function first_line(comment)
   return line
 end
 
---- Absolute path for a comment's stored (root-relative or absolute) path.
----@param sess margin.Session
----@param comment margin.Comment
----@return string
-local function abspath(sess, comment)
-  if comment.path:sub(1, 1) == '/' then
-    return comment.path
-  end
-  return sess.root .. '/' .. comment.path
-end
-
 --- Populate and open the quickfix list with the session's comments.
---- Archived comments are omitted unless `include_archived` is set.
 ---@param include_archived boolean|nil
 function M.list(include_archived)
   local sess = session.for_buf(vim.api.nvim_get_current_buf())
@@ -37,7 +25,7 @@ function M.list(include_archived)
   local items = {}
   for _, c in ipairs(session.select_comments(sess, include_archived)) do
     items[#items + 1] = {
-      filename = abspath(sess, c),
+      filename = session.abspath(sess, c),
       lnum = c.lnum,
       text = first_line(c),
     }
@@ -60,14 +48,13 @@ end
 --- Visible comments in the current buffer sorted by their live line position.
 --- Hidden (archived, not shown) comments are skipped so motions never land on
 --- an invisible box.
----@return integer buf
 ---@return margin.Comment[]
 ---@return table<string, integer> id -> live lnum
 local function current_buffer_comments()
   local buf = vim.api.nvim_get_current_buf()
   local path = session.path_for_buf(buf)
   if not path then
-    return buf, {}, {}
+    return {}, {}
   end
   local sess = session.for_buf(buf)
   local anchor = require('margin.anchor')
@@ -84,13 +71,13 @@ local function current_buffer_comments()
   table.sort(comments, function(a, b)
     return live[a.id] < live[b.id]
   end)
-  return buf, comments, live
+  return comments, live
 end
 
 --- Jump toward the next/previous comment in the current buffer (wraps).
 ---@param dir 1|-1
 local function jump(dir)
-  local _, comments, live = current_buffer_comments()
+  local comments, live = current_buffer_comments()
   if #comments == 0 then
     vim.notify('margin: no comments in buffer', vim.log.levels.INFO)
     return

@@ -79,7 +79,7 @@ T['orphaning']['range deletion invalidates -> orphaned on persist'] = function()
   local h = setup_comment({ 'a', 'b', 'c' }, 2, 2, 'note')
   -- delete the commented line entirely
   child.lua(('vim.api.nvim_buf_set_lines(%d, 1, 2, false, {})'):format(h.buf))
-  -- persist triggers the sync hook which reads details.invalid
+  -- persist flushes live mark state back into the comment
   child.lua(('S.persist(S.for_buf(%d))'):format(h.buf))
   local c = comment_state(h.id)
   eq(c.orphaned, true)
@@ -98,12 +98,12 @@ end
 T['re-anchoring']['relocates to a moved unique match within radius'] = function()
   -- Simulate external edit: reload file with the commented line shifted down.
   local h = setup_comment({ 'alpha', 'beta', 'gamma' }, 2, 2, 'note')
-  child.lua(([[(function()
+  child.lua([[
     local p = _G.tmp .. '/f.txt'
     vim.fn.writefile({ 'x0', 'x1', 'alpha', 'beta', 'gamma' }, p)
     vim.cmd('edit! ' .. vim.fn.fnameescape(p))
     A.on_buf_load(vim.api.nvim_get_current_buf())
-  end)()]]):format())
+  ]])
   local c = comment_state(h.id)
   eq(c.lnum, 4) -- 'beta' moved from line 2 to line 4
   eq(c.orphaned, false)
@@ -111,24 +111,24 @@ end
 
 T['re-anchoring']['ambiguous match -> orphaned'] = function()
   local h = setup_comment({ 'x', 'dup', 'y' }, 2, 2, 'note')
-  child.lua(([[(function()
+  child.lua([[
     local p = _G.tmp .. '/f.txt'
     vim.fn.writefile({ 'dup', 'a', 'b', 'dup' }, p)
     vim.cmd('edit! ' .. vim.fn.fnameescape(p))
     A.on_buf_load(vim.api.nvim_get_current_buf())
-  end)()]]):format())
+  ]])
   local c = comment_state(h.id)
   eq(c.orphaned, true)
 end
 
 T['re-anchoring']['no match -> orphaned'] = function()
   local h = setup_comment({ 'x', 'unique-line', 'y' }, 2, 2, 'note')
-  child.lua(([[(function()
+  child.lua([[
     local p = _G.tmp .. '/f.txt'
     vim.fn.writefile({ 'completely', 'different', 'content' }, p)
     vim.cmd('edit! ' .. vim.fn.fnameescape(p))
     A.on_buf_load(vim.api.nvim_get_current_buf())
-  end)()]]):format())
+  ]])
   local c = comment_state(h.id)
   eq(c.orphaned, true)
 end
@@ -136,21 +136,45 @@ end
 T['re-anchoring']['un-orphans when the line reappears'] = function()
   local h = setup_comment({ 'x', 'target', 'y' }, 2, 2, 'note')
   -- lose it
-  child.lua(([[(function()
+  child.lua([[
     local p = _G.tmp .. '/f.txt'
     vim.fn.writefile({ 'nothing', 'here', 'now' }, p)
     vim.cmd('edit! ' .. vim.fn.fnameescape(p))
     A.on_buf_load(vim.api.nvim_get_current_buf())
-  end)()]]):format())
+  ]])
   eq(comment_state(h.id).orphaned, true)
   -- bring it back
-  child.lua(([[(function()
+  child.lua([[
     local p = _G.tmp .. '/f.txt'
     vim.fn.writefile({ 'x', 'target', 'y' }, p)
     vim.cmd('edit! ' .. vim.fn.fnameescape(p))
     A.reanchor_all()
-  end)()]]):format())
+  ]])
   eq(comment_state(h.id).orphaned, false)
+end
+
+T['clearing'] = MiniTest.new_set()
+
+T['clearing']['clear removes signs and the session file'] = function()
+  local h = setup_comment({ 'alpha', 'beta', 'gamma' }, 2, 2, 'note')
+  local res = child.lua_get(([[(function()
+    local Store = require('margin.store')
+    local path = Store.path(S.root_for(%d))
+    local before = #vim.api.nvim_buf_get_extmarks(%d, A.ns, 0, -1, {})
+    vim.fn.confirm = function() return 1 end
+    vim.cmd('Margin clear')
+    S._reset()
+    return {
+      before = before,
+      signs = #vim.api.nvim_buf_get_extmarks(%d, A.ns, 0, -1, {}),
+      file = vim.fn.filereadable(path),
+      comments = #S.for_buf(%d).comments,
+    }
+  end)()]]):format(h.buf, h.buf, h.buf, h.buf))
+  eq(res.before, 1)
+  eq(res.signs, 0)
+  eq(res.file, 0)
+  eq(res.comments, 0)
 end
 
 return T

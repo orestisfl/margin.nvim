@@ -70,18 +70,14 @@ function M.clear()
   require('margin.actions').clear()
 end
 
---- Export the current session as markdown.
---- With a path, writes to that file and archives the comments written (no
---- prompt; the interactive `:Margin export` asks first). Otherwise opens a
---- scratch split that offers to archive its comments when closed. Archived
---- comments are excluded unless `include_archived` is set; an inclusive export
---- archives nothing.
+--- Export the current session as markdown, to `path` or a scratch split.
+--- Offers to archive the comments it wrote. Archived comments are excluded
+--- unless `include_archived` is set, which archives nothing.
 ---@param path string|nil
 ---@param include_archived boolean|nil
 ---@return string markdown
 function M.export(path, include_archived)
-  local archive = path ~= nil and path ~= '' and not include_archived
-  return require('margin.export').run(path, include_archived, archive)
+  return require('margin.export').run(path, include_archived)
 end
 
 return M

@@ -34,11 +34,9 @@ local function ensure_dir()
   end
 end
 
---- Read and decode a session from disk, or nil if none/unreadable.
---- Rejects a mismatched schema major so corrupt or future files are ignored.
+--- Read a compatible session from disk.
 ---@param root string
 ---@return margin.Session|nil
----@return string|nil error
 function M.load(root)
   local path = M.path(root)
   local fd = io.open(path, 'r')
@@ -50,12 +48,11 @@ function M.load(root)
 
   local ok, decoded = pcall(vim.json.decode, raw, { luanil = { object = true, array = true } })
   if not ok or type(decoded) ~= 'table' then
-    return nil, ('margin: could not parse session at %s'):format(path)
+    return nil
   end
 
   if math.floor(decoded.version or 0) ~= M.VERSION then
-    return nil,
-      ('margin: session %s has unsupported version %s'):format(path, tostring(decoded.version))
+    return nil
   end
 
   decoded.comments = decoded.comments or {}

@@ -26,7 +26,8 @@ local T = MiniTest.new_set({
   },
 })
 
--- Open a a.txt|b.txt vertical diff, folds off, return a.txt's bufnr.
+-- Open a two-pane vertical diff, folds off, return a.txt's bufnr.
+-- :vsplit puts b.txt on the left, so a.txt is the 'right' pane in panes().
 local function open_diff(lines_a, lines_b)
   return child.lua_get(([[(function()
     vim.fn.writefile(%s, _G.tmp .. '/a.txt')
@@ -96,7 +97,6 @@ T['alignment']['comment on an added line coexists with native filler'] = functio
   local ba = open_diff({ 'aa', 'bb', 'cc' }, { 'aa', 'INS', 'bb', 'cc' })
   child.lua(('S.add(%d, 1, 1, "top note"); A.on_buf_load(%d); R.redraw()'):format(ba, ba))
   local rows = panes()
-  -- lines present on both sides must stay aligned despite native + our filler
   assert_aligned(rows, { 'aa', 'bb', 'cc' })
 end
 
@@ -130,7 +130,6 @@ T['toggle_inline']['off removes boxes, on restores, signs persist'] = function()
   child.lua([[ require('margin.actions').toggle_inline() ]])
   local rows_off = panes()
   eq(row_of(rows_off, 'right', 'toggle note'), nil)
-  -- sign still present
   eq(row_of(rows_off, 'right', '┃') ~= nil, true)
 
   child.lua([[ require('margin.actions').toggle_inline() ]])
@@ -159,7 +158,6 @@ T['archive'] = MiniTest.new_set()
 T['archive']['hides archived comments by default, sign gone too'] = function()
   local ba = open_diff({ 'aa', 'bb', 'cc' }, { 'aa', 'bb', 'cc' })
   child.lua(('S.add(%d, 2, 2, "handed off"); A.on_buf_load(%d); R.redraw()'):format(ba, ba))
-  -- box + sign present while active
   eq(row_of(panes(), 'right', 'handed off') ~= nil, true)
   eq(row_of(panes(), 'right', '┃') ~= nil, true)
 
@@ -169,7 +167,6 @@ T['archive']['hides archived comments by default, sign gone too'] = function()
     R.redraw()
   ]]):format(ba))
   local rows = panes()
-  -- hidden: no box text, no sign
   eq(row_of(rows, 'right', 'handed off'), nil)
   eq(row_of(rows, 'right', '┃'), nil)
 end
@@ -183,7 +180,6 @@ T['archive']['show_archived renders the full dimmed box with a tag'] = function(
     require('margin.actions').toggle_archived()
   ]]):format(ba, ba, ba))
   local rows = panes()
-  -- full body shown again, plus the (archived) tag, plus the sign
   eq(row_of(rows, 'right', 'handed off') ~= nil, true)
   eq(row_of(rows, 'right', 'archived') ~= nil, true)
   eq(row_of(rows, 'right', '┃') ~= nil, true)
@@ -194,7 +190,6 @@ T['orphan'] = MiniTest.new_set()
 T['orphan']['renders a stale line, not a box'] = function()
   local ba = open_diff({ 'aa', 'unique-target', 'cc' }, { 'aa', 'unique-target', 'cc' })
   child.lua(('S.add(%d, 2, 2, "will orphan"); A.on_buf_load(%d)'):format(ba, ba))
-  -- external change removes the target line
   child.lua(([[
     vim.fn.writefile({ 'aa', 'gone', 'cc' }, _G.tmp .. '/a.txt')
     vim.cmd('edit!'); vim.wo.foldenable = false

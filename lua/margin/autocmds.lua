@@ -22,15 +22,22 @@ function M.setup()
     end,
   })
 
-  -- Re-anchor and render buffers that carry comments as they load / show.
-  vim.api.nvim_create_autocmd({ 'BufReadPost', 'BufWinEnter' }, {
+  -- Restore comments when Neovim reads a buffer.
+  vim.api.nvim_create_autocmd('BufReadPost', {
     group = augroup,
     callback = function(ev)
       require('margin.anchor').on_buf_load(ev.buf)
     end,
   })
 
-  vim.api.nvim_create_autocmd({ 'BufWinEnter', 'WinEnter', 'DiffUpdated' }, {
+  vim.api.nvim_create_autocmd({
+    'BufWinEnter',
+    'TabEnter',
+    'WinNew',
+    'WinClosed',
+    'WinResized',
+    'DiffUpdated',
+  }, {
     group = augroup,
     callback = function()
       require('margin.render').schedule()

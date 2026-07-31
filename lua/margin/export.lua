@@ -6,81 +6,115 @@ local M = {}
 
 local PREAMBLE = 'I reviewed the changes. Please address the following comments.'
 
---- Absolute path for a comment's stored path.
----@param sess margin.Session
----@param comment margin.Comment
----@return string
-local function abspath(sess, comment)
-  if comment.path:sub(1, 1) == '/' then
-    return comment.path
-  end
-  return sess.root .. '/' .. comment.path
+--- Ask whether to archive the comments an export just handed off.
+---@param n integer
+---@return boolean
+local function confirm_archive(n)
+  return vim.fn.confirm(('Archive %d exported comments?'):format(n), '&Yes\n&No', 1) == 1
 end
 
---- A loaded buffer currently displayed in a window for `path`, plus its win.
---- Returns nil when the file is not visible.
----@param abs string absolute path
----@return integer|nil buf
----@return integer|nil win
-local function visible_buf(abs)
-  for _, win in ipairs(vim.api.nvim_list_wins()) do
-    local buf = vim.api.nvim_win_get_buf(win)
-    if vim.api.nvim_buf_get_name(buf) == abs then
-      return buf, win
+--- Archive exported comments that are still active.
+---@param sess margin.Session
+---@param comments margin.Comment[]
+---@return integer
+local function archive_export(sess, comments)
+  local selected = {}
+  for _, comment in ipairs(comments) do
+    selected[comment.id] = true
+  end
+
+  local active = {}
+  for _, comment in ipairs(sess.comments) do
+    if selected[comment.id] and not comment.archived then
+      active[#active + 1] = comment
     end
   end
-  return nil
+  if #active == 0 or not confirm_archive(#active) then
+    return 0
+  end
+
+  local archived = session.archive_comments(sess, active)
+  if archived > 0 then
+    require('margin.render').schedule()
+  end
+  return archived
 end
 
---- Filetype for a fenced code block, from a loaded buffer or the extension.
----@param abs string
----@param buf integer|nil
----@return string
-local function language(abs, buf)
-  if buf and vim.bo[buf].filetype ~= '' then
-    return vim.bo[buf].filetype
+---@class margin.ExportFile
+---@field buf? integer
+---@field win? integer
+---@field loaded? boolean
+---@field lines? string[]
+---@field language? string
+
+---@class margin.ExportContext
+---@field files table<string, margin.ExportFile>
+---@field diffs table<string, table[]>
+
+--- Create caches for one export.
+---@return margin.ExportContext
+local function export_context()
+  local files = {}
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    local buf = vim.api.nvim_win_get_buf(win)
+    local path = vim.api.nvim_buf_get_name(buf)
+    if path ~= '' and not files[path] then
+      files[path] = { buf = buf, win = win }
+    end
   end
-  return vim.filetype.match({ filename = abs }) or ''
+  return { files = files, diffs = {} }
 end
 
---- Lines of a file, from the loaded buffer if any, else read from disk.
+--- Read and cache the data for a file.
+---@param ctx margin.ExportContext
 ---@param abs string
----@param buf integer|nil
----@return string[]|nil
-local function file_lines(abs, buf)
-  if buf and vim.api.nvim_buf_is_loaded(buf) then
-    return vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+---@return margin.ExportFile
+local function file_data(ctx, abs)
+  local data = ctx.files[abs] or {}
+  ctx.files[abs] = data
+  if data.loaded then
+    return data
   end
-  if vim.fn.filereadable(abs) == 1 then
-    return vim.fn.readfile(abs)
+  data.loaded = true
+
+  if data.buf and vim.api.nvim_buf_is_loaded(data.buf) then
+    data.lines = vim.api.nvim_buf_get_lines(data.buf, 0, -1, false)
+  elseif vim.fn.filereadable(abs) == 1 then
+    data.lines = vim.fn.readfile(abs)
   end
-  return nil
+  if data.buf and vim.bo[data.buf].filetype ~= '' then
+    data.language = vim.bo[data.buf].filetype
+  else
+    data.language = vim.filetype.match({ filename = abs }) or ''
+  end
+  return data
 end
 
 --- The unified-diff hunk containing `lnum` on the given side, or nil.
 --- `side` selects which of the `@@ -old +new @@` ranges to match against.
+---@param ctx margin.ExportContext
 ---@param buf_a integer counterpart buffer (old side, text_a)
 ---@param buf_b integer source buffer (new side, text_b)
 ---@param lnum integer 1-based line on the comment's side
 ---@param side "new"|"old"
 ---@return string|nil hunk text (header + body)
-local function diff_hunk(buf_a, buf_b, lnum, side)
-  local ta = table.concat(vim.api.nvim_buf_get_lines(buf_a, 0, -1, false), '\n') .. '\n'
-  local tb = table.concat(vim.api.nvim_buf_get_lines(buf_b, 0, -1, false), '\n') .. '\n'
-  local unified = vim.text.diff(ta, tb, { ctxlen = config.current.context_lines }) --[[@as string]]
-  if not unified or unified == '' then
-    return nil
-  end
-
-  local lines = vim.split(unified, '\n', { plain = true })
-  local hunks = {}
-  local cur
-  for _, line in ipairs(lines) do
-    if line:match('^@@ ') then
-      cur = { header = line, body = {} }
-      hunks[#hunks + 1] = cur
-    elseif cur and line ~= '' then
-      cur.body[#cur.body + 1] = line
+local function diff_hunk(ctx, buf_a, buf_b, lnum, side)
+  local key = ('%d:%d'):format(buf_a, buf_b)
+  local hunks = ctx.diffs[key]
+  if not hunks then
+    hunks = {}
+    ctx.diffs[key] = hunks
+    local unified = vim.text.diff(diffmap.buf_text(buf_a), diffmap.buf_text(buf_b), {
+      ctxlen = config.current.context_lines,
+    }) --[[@as string]]
+    local cur
+    for _, line in ipairs(vim.split(unified or '', '\n', { plain = true })) do
+      if line:match('^@@ ') then
+        cur = { header = line, body = {} }
+        hunks[#hunks + 1] = cur
+      elseif cur and line ~= '' then
+        cur.body[#cur.body + 1] = line
+      end
     end
   end
 
@@ -103,44 +137,48 @@ end
 
 --- The context block for a comment: a diff hunk when live in a diff window,
 --- otherwise a code snippet, otherwise nothing.
+---@param ctx margin.ExportContext
 ---@param sess margin.Session
 ---@param comment margin.Comment
 ---@return string|nil fenced block
-local function context_block(sess, comment)
-  local abs = abspath(sess, comment)
-  local buf, win = visible_buf(abs)
+local function context_block(ctx, sess, comment)
+  local abs = session.abspath(sess, comment)
+  local visible = ctx.files[abs]
+  local buf = visible and visible.buf
+  local win = visible and visible.win
 
   if buf and win and vim.wo[win].diff then
-    local cp = diffmap.counterpart(win)
-    if cp then
+    local cp_buf = diffmap.counterpart(win)
+    if cp_buf then
       -- Unified diff wants text_a = old, text_b = new. A new-side comment
       -- sits in the new buffer (its counterpart is old); an old-side comment
       -- sits in the old buffer (its counterpart is new), so swap accordingly.
       local buf_a, buf_b
       if comment.side == 'old' then
-        buf_a, buf_b = buf, cp.buf
+        buf_a, buf_b = buf, cp_buf
       else
-        buf_a, buf_b = cp.buf, buf
+        buf_a, buf_b = cp_buf, buf
       end
-      local hunk = diff_hunk(buf_a, buf_b, comment.lnum, comment.side)
+      local hunk = diff_hunk(ctx, buf_a, buf_b, comment.lnum, comment.side)
       if hunk then
         return '```diff\n' .. hunk .. '\n```'
       end
     end
   end
 
-  local lines = file_lines(abs, buf)
+  local data = file_data(ctx, abs)
+  local lines = data.lines
   if not lines then
     return nil
   end
-  local ctx = config.current.context_lines
-  local lo = math.max(1, comment.lnum - ctx)
-  local hi = math.min(#lines, comment.end_lnum + ctx)
+  local context_lines = config.current.context_lines
+  local lo = math.max(1, comment.lnum - context_lines)
+  local hi = math.min(#lines, comment.end_lnum + context_lines)
   if lo > #lines then
     return nil
   end
   local snippet = vim.list_slice(lines, lo, hi)
-  local lang = language(abs, buf)
+  local lang = data.language or ''
   return '```' .. lang .. '\n' .. table.concat(snippet, '\n') .. '\n```'
 end
 
@@ -161,13 +199,11 @@ local function header(comment)
   return '## ' .. anchor
 end
 
---- Render the session to the fixed markdown export format.
---- Archived comments are omitted unless `include_archived` is set.
+--- Render selected comments to the export format.
 ---@param sess margin.Session
----@param include_archived boolean|nil
+---@param comments margin.Comment[]
 ---@return string
-function M.render(sess, include_archived)
-  local comments = session.select_comments(sess, include_archived)
+local function render_comments(sess, comments)
   table.sort(comments, function(a, b)
     if a.path == b.path then
       return a.lnum < b.lnum
@@ -175,14 +211,15 @@ function M.render(sess, include_archived)
     return a.path < b.path
   end)
 
+  local ctx = export_context()
   local parts = { PREAMBLE }
   for _, comment in ipairs(comments) do
     local body = comment.text
     if comment.orphaned then
-      body = body .. '\n\n(position may be stale)'
+      body = body .. '\n\n(position can be stale)'
     end
     local section = { header(comment), '', body }
-    local block = context_block(sess, comment)
+    local block = context_block(ctx, sess, comment)
     if block then
       section[#section + 1] = ''
       section[#section + 1] = block
@@ -191,6 +228,14 @@ function M.render(sess, include_archived)
   end
 
   return table.concat(parts, '\n\n') .. '\n'
+end
+
+--- Render the session to the export format.
+---@param sess margin.Session
+---@param include_archived boolean|nil
+---@return string
+function M.render(sess, include_archived)
+  return render_comments(sess, session.select_comments(sess, include_archived))
 end
 
 local BUFNAME = 'margin://export'
@@ -236,8 +281,7 @@ local function close_preview(buf)
     return
   end
 
-  local choice = vim.fn.confirm(('Archive %d exported comments?'):format(#active), '&Yes\n&No', 1)
-  if choice == 1 and session.archive_comments(preview.session, active) > 0 then
+  if confirm_archive(#active) and session.archive_comments(preview.session, active) > 0 then
     require('margin.render').schedule()
   end
 end
@@ -275,18 +319,16 @@ local function show(markdown, sess, exported, offer_archive)
   end
 end
 
---- Export the current session. With `path`, writes a file; otherwise opens
---- the markdown in a scratch split. Returns the rendered markdown.
+--- Export the current session. With `path`, writes a file and offers to archive
+--- what it wrote; otherwise opens the markdown in a scratch split that offers
+--- the same when it closes. Declining keeps the comments active for a re-export.
 ---
---- Archived comments are excluded unless `include_archived` is set. When
---- `archive` is set, the comments written are archived afterwards so the next
---- export omits them. A scratch preview of active comments offers to archive
---- the comments represented by its latest contents when the buffer closes.
+--- Archived comments are excluded unless `include_archived` is set, in which
+--- case the re-dump archives nothing and never prompts.
 ---@param path string|nil
 ---@param include_archived boolean|nil
----@param archive boolean|nil archive the written comments after a file export
 ---@return string markdown
-function M.run(path, include_archived, archive)
+function M.run(path, include_archived)
   local sess = session.for_buf(vim.api.nvim_get_current_buf())
 
   local exported = session.select_comments(sess, include_archived)
@@ -295,36 +337,33 @@ function M.run(path, include_archived, archive)
     return ''
   end
 
-  local markdown = M.render(sess, include_archived)
+  local markdown = render_comments(sess, exported)
 
-  if path and path ~= '' then
-    local files = {}
-    for _, c in ipairs(exported) do
-      files[c.path] = true
-    end
-    local abs = vim.fn.fnamemodify(path, ':p')
-    vim.fn.writefile(vim.split(markdown, '\n', { plain = true }), abs)
-
-    local archived = 0
-    if archive then
-      archived = session.archive_active(sess)
-    end
-    local suffix = archived > 0 and (', archived %d'):format(archived) or ''
-    vim.notify(
-      ('margin: exported %d comments (%d files) to %s%s'):format(
-        #exported,
-        vim.tbl_count(files),
-        abs,
-        suffix
-      )
-    )
-    if archived > 0 then
-      require('margin.render').schedule()
-    end
-  else
+  if not path or path == '' then
     show(markdown, sess, exported, not include_archived)
+    return markdown
   end
 
+  local files = {}
+  for _, c in ipairs(exported) do
+    files[c.path] = true
+  end
+  local abs = vim.fn.fnamemodify(path, ':p')
+  vim.fn.writefile(vim.split(markdown, '\n', { plain = true }), abs)
+
+  local archived = 0
+  if not include_archived then
+    archived = archive_export(sess, exported)
+  end
+  local suffix = archived > 0 and (', archived %d'):format(archived) or ''
+  vim.notify(
+    ('margin: exported %d comments (%d files) to %s%s'):format(
+      #exported,
+      vim.tbl_count(files),
+      abs,
+      suffix
+    )
+  )
   return markdown
 end
 

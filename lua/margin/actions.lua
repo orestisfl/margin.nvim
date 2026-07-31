@@ -32,6 +32,20 @@ local function comment_at(buf, lnum)
   return best, sess
 end
 
+--- Return the comment at the cursor, or show a warning.
+---@return margin.Comment|nil
+---@return margin.Session|nil
+local function comment_at_cursor()
+  local buf = vim.api.nvim_get_current_buf()
+  local lnum = vim.api.nvim_win_get_cursor(0)[1]
+  local comment, sess = comment_at(buf, lnum)
+  if not comment or not sess then
+    vim.notify('margin: no comment under cursor', vim.log.levels.WARN)
+    return nil
+  end
+  return comment, sess
+end
+
 --- Comment on the current line or a visual/command range.
 ---@param opts { line1?: integer, line2?: integer }|nil
 function M.comment(opts)
@@ -44,7 +58,6 @@ function M.comment(opts)
     lnum, end_lnum = end_lnum, lnum
   end
 
-  -- Validate we can resolve a path before opening the composer.
   local path, _, err = session.resolve_path(buf, win)
   if not path then
     vim.notify(err or 'margin: cannot resolve path', vim.log.levels.ERROR)
@@ -74,11 +87,8 @@ end
 
 --- Edit the comment under the cursor.
 function M.edit()
-  local buf = vim.api.nvim_get_current_buf()
-  local lnum = vim.api.nvim_win_get_cursor(0)[1]
-  local comment, sess = comment_at(buf, lnum)
+  local comment, sess = comment_at_cursor()
   if not comment or not sess then
-    vim.notify('margin: no comment under cursor', vim.log.levels.WARN)
     return
   end
   require('margin.editor').open({
@@ -93,11 +103,8 @@ end
 
 --- Delete the comment under the cursor.
 function M.delete()
-  local buf = vim.api.nvim_get_current_buf()
-  local lnum = vim.api.nvim_win_get_cursor(0)[1]
-  local comment, sess = comment_at(buf, lnum)
+  local comment, sess = comment_at_cursor()
   if not comment or not sess then
-    vim.notify('margin: no comment under cursor', vim.log.levels.WARN)
     return
   end
   session.delete(sess, comment)
@@ -107,11 +114,8 @@ end
 --- Set the archived flag on the comment under the cursor, then redraw.
 ---@param archived boolean
 local function set_archived_at_cursor(archived)
-  local buf = vim.api.nvim_get_current_buf()
-  local lnum = vim.api.nvim_win_get_cursor(0)[1]
-  local comment, sess = comment_at(buf, lnum)
+  local comment, sess = comment_at_cursor()
   if not comment or not sess then
-    vim.notify('margin: no comment under cursor', vim.log.levels.WARN)
     return
   end
   session.set_archived(sess, comment, archived)
@@ -143,25 +147,6 @@ function M.toggle_archived()
   require('margin.render').redraw()
 end
 
---- Export the session. File exports prompt before archiving; scratch previews
---- prompt when closed. Declining (Esc / No) keeps comments active for a
---- re-export. `include_archived` re-dumps never archive or prompt.
----@param path string|nil
----@param include_archived boolean|nil
----@return string markdown
-function M.export(path, include_archived)
-  local archive = false
-  if path and path ~= '' and not include_archived then
-    local sess = session.for_buf(vim.api.nvim_get_current_buf())
-    local n = #session.select_comments(sess, false)
-    if n > 0 then
-      local choice = vim.fn.confirm(('Archive %d exported comments?'):format(n), '&Yes\n&No', 1)
-      archive = choice == 1
-    end
-  end
-  return require('margin.export').run(path, include_archived, archive)
-end
-
 --- Delete every comment in the current session after confirmation.
 function M.clear()
   local buf = vim.api.nvim_get_current_buf()
@@ -179,10 +164,8 @@ function M.clear()
     return
   end
   session.clear(sess)
+  require('margin.anchor').clear_all()
   require('margin.render').redraw()
 end
-
---- Expose the cursor-hit lookup for the quickfix motions.
-M.comment_at = comment_at
 
 return M

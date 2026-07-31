@@ -1,3 +1,4 @@
+local diffmap = require('margin.diffmap')
 local store = require('margin.store')
 
 ---@class margin.Comment
@@ -25,15 +26,6 @@ local M = {}
 ---@type table<string, margin.Session>
 local cache = {}
 
---- Change subscribers, invoked as fn(session, event) after each mutation.
----@type fun(session: margin.Session, event: string)[]
-local subscribers = {}
-
---- Position-sync hooks, invoked before each persist to flush live extmark
---- positions back into the stored comments.
----@type fun(session: margin.Session)[]
-local sync_hooks = {}
-
 local id_counter = 0
 
 --- ISO 8601 timestamp in UTC.
@@ -47,26 +39,6 @@ end
 local function new_id()
   id_counter = id_counter + 1
   return ('%d-%d'):format(os.time(), id_counter)
-end
-
---- Register a callback fired after every mutation.
----@param fn fun(session: margin.Session, event: string)
-function M.on_change(fn)
-  table.insert(subscribers, fn)
-end
-
---- Register a hook that syncs live positions into comments before persist.
----@param fn fun(session: margin.Session)
-function M.add_sync_hook(fn)
-  table.insert(sync_hooks, fn)
-end
-
----@param session margin.Session
----@param event string
-local function emit(session, event)
-  for _, fn in ipairs(subscribers) do
-    pcall(fn, session, event)
-  end
 end
 
 --- Detect the project root for a buffer. Git is a marker only.
@@ -93,7 +65,6 @@ function M.get(root)
   if loaded then
     loaded.root = root
     cache[root] = loaded
-    emit(loaded, 'load')
     return loaded
   end
 
@@ -121,9 +92,7 @@ end
 ---@return boolean ok
 ---@return string|nil error
 function M.persist(session)
-  for _, fn in ipairs(sync_hooks) do
-    pcall(fn, session)
-  end
+  require('margin.anchor').sync_session(session)
   session.updated_at = now_iso()
   return store.save(session)
 end
@@ -172,11 +141,10 @@ function M.resolve_path(buf, win)
   end
 
   -- Unnamed / non-file: borrow the counterpart diff window's path.
-  local ok, diffmap = pcall(require, 'margin.diffmap')
-  if ok and win then
-    local cp = diffmap.counterpart(win)
-    if cp then
-      local cp_path = buf_fspath(cp.buf)
+  if win then
+    local cp_buf = diffmap.counterpart(win)
+    if cp_buf then
+      local cp_path = buf_fspath(cp_buf)
       if cp_path then
         return relativize(cp_path, root), 'old'
       end
@@ -221,7 +189,6 @@ function M.add(buf, lnum, end_lnum, text, win)
   local session = M.for_buf(buf)
   table.insert(session.comments, comment)
   M.persist(session)
-  emit(session, 'add')
   return comment
 end
 
@@ -235,11 +202,9 @@ function M.edit(session, comment, text)
   end
   comment.text = text
   M.persist(session)
-  emit(session, 'edit')
 end
 
---- Set a comment's archived flag. Archived comments are excluded from export
---- and the default comment list, but keep re-anchoring and render dimmed.
+--- Set a comment's archived flag.
 ---@param session margin.Session
 ---@param comment margin.Comment
 ---@param archived boolean
@@ -249,7 +214,6 @@ function M.set_archived(session, comment, archived)
   end
   comment.archived = archived
   M.persist(session)
-  emit(session, 'archive')
 end
 
 --- Archive the selected comments that are still present and active.
@@ -271,16 +235,8 @@ function M.archive_comments(session, comments)
   end
   if n > 0 then
     M.persist(session)
-    emit(session, 'archive')
   end
   return n
-end
-
---- Archive every not-yet-archived comment.
----@param session margin.Session
----@return integer archived count newly archived
-function M.archive_active(session)
-  return M.archive_comments(session, session.comments)
 end
 
 --- Remove a comment from its session.
@@ -294,15 +250,13 @@ function M.delete(session, comment)
     end
   end
   M.persist(session)
-  emit(session, 'delete')
 end
 
 --- Delete every comment in a session and remove its file.
 ---@param session margin.Session
 function M.clear(session)
   session.comments = {}
-  M.persist(session)
-  emit(session, 'clear')
+  store.delete(session.root)
 end
 
 --- All comments in a session for a given stored path, in line order.
@@ -345,12 +299,15 @@ function M.path_for_buf(buf)
   return path
 end
 
---- Notify subscribers of an out-of-band change (e.g. re-anchor) and persist.
+--- Absolute path for a comment's stored (root-relative or absolute) path.
 ---@param session margin.Session
----@param event string
-function M.touch(session, event)
-  M.persist(session)
-  emit(session, event or 'change')
+---@param comment margin.Comment
+---@return string
+function M.abspath(session, comment)
+  if comment.path:sub(1, 1) == '/' then
+    return comment.path
+  end
+  return vim.fs.joinpath(session.root, comment.path)
 end
 
 --- Persist every loaded session (final sync on exit).
@@ -358,16 +315,6 @@ function M.persist_all()
   for _, session in pairs(cache) do
     M.persist(session)
   end
-end
-
---- All currently loaded sessions.
----@return margin.Session[]
-function M.all()
-  local out = {}
-  for _, session in pairs(cache) do
-    out[#out + 1] = session
-  end
-  return out
 end
 
 --- Drop cached sessions (test isolation). Leaves module-load hooks intact.

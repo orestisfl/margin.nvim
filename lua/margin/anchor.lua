@@ -14,11 +14,7 @@ local SCAN_RADIUS = 40
 local marks = {}
 
 --- Trimmed comparison so leading/trailing whitespace churn doesn't break match.
----@param s string
----@return string
-local function trim(s)
-  return (s:gsub('^%s+', ''):gsub('%s+$', ''))
-end
+local trim = vim.trim
 
 --- Sign-column highlight for a comment by state, or nil when it has no sign.
 --- Hidden (archived, not shown) comments keep a position mark but no sign;
@@ -201,12 +197,9 @@ function M.on_buf_load(buf)
     end
   end
   if changed then
-    session.touch(sess, 'reanchor')
+    session.persist(sess)
   end
-  local ok, render = pcall(require, 'margin.render')
-  if ok then
-    render.schedule()
-  end
+  require('margin.render').schedule()
 end
 
 --- Restore comments in all loaded buffers.
@@ -218,19 +211,20 @@ function M.reanchor_all()
   end
 end
 
---- Ensure anchor marks exist for all comments in a buffer (without re-scanning).
---- A missing mark is placed; an existing one is left in place unless its sign
---- differs from the comment's current state (recolor on archive, or add/drop
---- the sign on a visibility toggle), in which case it is re-placed at its live
---- position so the change never disturbs the tracked range.
+--- Ensure anchor marks exist for all comments in a buffer, without re-scanning.
+--- A mark whose sign no longer matches its comment's state is re-placed at its
+--- live position, so recoloring never disturbs the tracked range.
 ---@param buf integer
-function M.ensure(buf)
-  local path = session.path_for_buf(buf)
-  if not path then
-    return
+---@param comments? margin.Comment[]
+function M.ensure(buf, comments)
+  if not comments then
+    local path = session.path_for_buf(buf)
+    if not path then
+      return
+    end
+    comments = session.comments_for_path(session.for_buf(buf), path)
   end
-  local sess = session.for_buf(buf)
-  for _, comment in ipairs(session.comments_for_path(sess, path)) do
+  for _, comment in ipairs(comments) do
     local id = marks[buf] and marks[buf][comment.id]
     if not id then
       set_mark(buf, comment)
@@ -261,16 +255,17 @@ function M.range(buf, comment)
   return comment.lnum, comment.end_lnum
 end
 
---- Remove all anchor marks for a buffer.
----@param buf integer
-function M.clear_buf(buf)
-  if vim.api.nvim_buf_is_valid(buf) then
-    vim.api.nvim_buf_clear_namespace(buf, M.ns, 0, -1)
+--- Delete all anchor marks. `ensure` restores marks for existing comments.
+function M.clear_all()
+  for buf in pairs(marks) do
+    if vim.api.nvim_buf_is_valid(buf) then
+      vim.api.nvim_buf_clear_namespace(buf, M.ns, 0, -1)
+    end
   end
-  marks[buf] = nil
+  marks = {}
 end
 
---- Flush live positions for all loaded buffers of a session (persist hook).
+--- Flush live extmark positions into a session's comments before it is saved.
 ---@param sess margin.Session
 function M.sync_session(sess)
   local by_path = {}
@@ -278,8 +273,8 @@ function M.sync_session(sess)
     by_path[c.path] = by_path[c.path] or {}
     table.insert(by_path[c.path], c)
   end
-  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.api.nvim_buf_is_loaded(buf) then
+  for buf in pairs(marks) do
+    if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) then
       local p = session.path_for_buf(buf)
       if p and by_path[p] then
         sync_from_marks(buf, by_path[p])
@@ -292,8 +287,5 @@ end
 function M._reset()
   marks = {}
 end
-
--- Flush live extmark positions into comments before every persist.
-session.add_sync_hook(M.sync_session)
 
 return M

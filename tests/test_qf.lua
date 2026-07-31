@@ -45,10 +45,8 @@ T['list']['populates quickfix sorted by path then line'] = function()
   ]]):format(buf, buf, buf))
   local qf = child.lua_get([[vim.fn.getqflist()]])
   eq(#qf, 2)
-  -- sorted by line within the same file
   eq(qf[1].lnum, 2)
   eq(qf[2].lnum, 4)
-  -- text is the first line only
   eq(qf[2].text, 'later')
 end
 
@@ -83,7 +81,6 @@ T['list']['omits archived comments unless included'] = function()
   child.lua([[ QF.list(true) ]])
   local all = child.lua_get([[vim.fn.getqflist()]])
   eq(#all, 2)
-  -- archived entry is prefixed
   local archived_line
   for _, item in ipairs(all) do
     if item.text:sub(1, 10) == '[archived]' then
@@ -133,12 +130,12 @@ T['motions']['skip hidden archived comments'] = function()
     S.add(%d, 2, 2, 'two')
     local four = S.add(%d, 4, 4, 'four')
     A.on_buf_load(%d)
-    S.set_archived(S.for_buf(%d), four, true)  -- hidden by default
+    S.set_archived(S.for_buf(%d), four, true)
     vim.api.nvim_win_set_cursor(0, { 1, 0 })
   ]]):format(buf, buf, buf, buf))
   child.lua([[ QF.next() ]])
   eq(child.lua_get([[ vim.fn.line('.') ]]), 2)
-  child.lua([[ QF.next() ]]) -- wraps back to 2, never lands on hidden 4
+  child.lua([[ QF.next() ]])
   eq(child.lua_get([[ vim.fn.line('.') ]]), 2)
 end
 

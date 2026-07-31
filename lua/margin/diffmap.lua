@@ -25,7 +25,7 @@ end
 --- First other window with 'diff' set and a different buffer; nil otherwise.
 --- With more than two diff windows (3-way merge) the first is chosen.
 ---@param win integer
----@return { win: integer, buf: integer }|nil
+---@return integer|nil buffer
 function M.counterpart(win)
   if not vim.api.nvim_win_is_valid(win) or not vim.wo[win].diff then
     return nil
@@ -36,15 +36,19 @@ function M.counterpart(win)
     if w ~= win and vim.wo[w].diff then
       local b = vim.api.nvim_win_get_buf(w)
       if b ~= this_buf then
-        return { win = w, buf = b }
+        return b
       end
     end
   end
   return nil
 end
 
----@type table<string, table>
-local cache = {}
+---@class margin.DiffCache
+---@field key string
+---@field hunks integer[][]
+
+---@type margin.DiffCache|nil
+local cache
 
 --- Diff hunks between two buffers, cached per changedtick pair.
 --- Hunks are {start_a, count_a, start_b, count_b} with buf_a as the "to" side.
@@ -55,9 +59,8 @@ local function hunks_between(buf_a, buf_b)
   local ta = vim.api.nvim_buf_get_changedtick(buf_a)
   local tb = vim.api.nvim_buf_get_changedtick(buf_b)
   local key = ('%d:%d:%d:%d'):format(buf_a, ta, buf_b, tb)
-  local hit = cache[key]
-  if hit then
-    return hit.hunks
+  if cache and cache.key == key then
+    return cache.hunks
   end
 
   local hunks = vim.text.diff(M.buf_text(buf_a), M.buf_text(buf_b), {
@@ -67,7 +70,7 @@ local function hunks_between(buf_a, buf_b)
     algorithm = diff_algorithm(),
   }) --[[@as integer[][] ]]
 
-  cache = { [key] = { hunks = hunks } }
+  cache = { key = key, hunks = hunks }
   return hunks
 end
 
@@ -77,7 +80,7 @@ end
 ---@param buf_a integer target buffer
 ---@param buf_b integer source buffer (line is in this buffer)
 ---@param line integer 1-based line in buf_b
----@return { line: integer, placement: "above"|"below", exact: boolean }
+---@return { line: integer, placement: "above"|"below" }
 function M.map(buf_a, buf_b, line)
   local hunks = hunks_between(buf_a, buf_b)
   local offset = 0
@@ -94,14 +97,13 @@ function M.map(buf_a, buf_b, line)
           return {
             line = math.min(sa + (line - sb), sa + ca - 1),
             placement = 'below',
-            exact = true,
           }
         else
           -- pure addition in buf_b: no counterpart line exists
           if sa == 0 then
-            return { line = 1, placement = 'above', exact = false }
+            return { line = 1, placement = 'above' }
           end
-          return { line = sa, placement = 'below', exact = false }
+          return { line = sa, placement = 'below' }
         end
       else
         offset = offset + (ca - cb) -- hunk strictly above the source line
@@ -112,12 +114,12 @@ function M.map(buf_a, buf_b, line)
     end
   end
 
-  return { line = line + offset, placement = 'below', exact = true }
+  return { line = line + offset, placement = 'below' }
 end
 
 --- Clear the hunk cache (test isolation).
 function M._reset()
-  cache = {}
+  cache = nil
 end
 
 return M

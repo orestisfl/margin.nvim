@@ -16,7 +16,6 @@ local T = MiniTest.new_set({
         S = require('margin.session')
         A = require('margin.anchor')
         E = require('margin.export')
-        Act = require('margin.actions')
         S._reset(); A._reset()
         -- Deterministic archive confirms: set _G.confirm_choice.
         _G.confirm_choice = 1
@@ -107,7 +106,6 @@ T['diff']['live diff window produces a diff hunk'] = function()
     A.on_buf_load(bn)
     return E.render(S.for_buf(bn))
   end)()]])
-  -- Contains a diff fence and the changed hunk with the +/- markers.
   eq(md:find('```diff', 1, true) ~= nil, true)
   eq(md:find('-c', 1, true) ~= nil, true)
   eq(md:find('+CHANGED', 1, true) ~= nil, true)
@@ -143,7 +141,7 @@ T['orphan']['orphaned comment notes stale position'] = function()
     A.on_buf_load(buf)
     return E.render(S.for_buf(buf))
   end)()]])
-  eq(md:find('(position may be stale)', 1, true) ~= nil, true)
+  eq(md:find('(position can be stale)', 1, true) ~= nil, true)
 end
 
 T['buffer'] = MiniTest.new_set()
@@ -217,7 +215,6 @@ T['archive']['render omits archived comments by default'] = function()
   end)()]])
   eq(res.default:find('keep me', 1, true) ~= nil, true)
   eq(res.default:find('already handed off', 1, true), nil)
-  -- include_archived surfaces it with an (archived) header suffix
   eq(res.all:find('already handed off', 1, true) ~= nil, true)
   eq(res.all:find('(archived)', 1, true) ~= nil, true)
 end
@@ -230,19 +227,17 @@ T['archive']['file export archives what it wrote'] = function()
     S.add(buf, 1, 1, 'first pass')
     A.on_buf_load(buf)
     local out = _G.tmp .. '/review.md'
-    Act.export(out)                       -- writes + archives (confirm yes)
-    local after_first = Act.export(out)   -- nothing active left to export
-    S.add(buf, 2, 2, 'second pass')       -- a fresh comment
-    local second = Act.export(out)
+    E.run(out)
+    local after_first = E.run(out)
+    S.add(buf, 2, 2, 'second pass')
+    local second = E.run(out)
     return {
       after_first = after_first,
       has_second = second:find('second pass', 1, true) ~= nil,
       has_first_in_second = second:find('first pass', 1, true) ~= nil,
     }
   end)()]])
-  -- Second export of an all-archived session yields nothing.
   eq(res.after_first, '')
-  -- A new comment exports alone; the archived one is not re-included.
   eq(res.has_second, true)
   eq(res.has_first_in_second, false)
 end
@@ -254,11 +249,10 @@ T['archive']['declining the confirm keeps comments active'] = function()
     local buf = vim.api.nvim_get_current_buf()
     S.add(buf, 1, 1, 'keep active')
     A.on_buf_load(buf)
-    _G.confirm_choice = 2  -- No: changed my mind
-    Act.export(_G.tmp .. '/review.md')
+    _G.confirm_choice = 2
+    E.run(_G.tmp .. '/review.md')
     local archived = S.for_buf(buf).comments[1].archived
-    -- A second export still finds it active (nothing was archived).
-    local second = Act.export(_G.tmp .. '/review.md')
+    local second = E.run(_G.tmp .. '/review.md')
     return { archived = archived, has = second:find('keep active', 1, true) ~= nil }
   end)()]])
   eq(res.archived, false)
@@ -328,9 +322,8 @@ T['archive']['bang file export does not re-archive'] = function()
     A.on_buf_load(buf)
     local sess = S.for_buf(buf)
     S.set_archived(sess, c, true)
-    local md = Act.export(_G.tmp .. '/all.md', true)  -- include archived
-    -- A plain re-export still finds nothing active (bang didn't unarchive).
-    return { has = md:find('note', 1, true) ~= nil, plain = Act.export(_G.tmp .. '/x.md') }
+    local md = E.run(_G.tmp .. '/all.md', true)
+    return { has = md:find('note', 1, true) ~= nil, plain = E.run(_G.tmp .. '/x.md') }
   end)()]])
   eq(res.has, true)
   eq(res.plain, '')

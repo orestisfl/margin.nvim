@@ -20,10 +20,8 @@ CONTENTS                                                       *margin-contents*
 margin.nvim adds local review comments to any Neovim buffer. It shows each
 comment below its selected lines.
 
-margin.nvim is attach-only. It never creates diff views: you set up diffs
-however you like (`nvim -d a b`, |:diffthis|, a git plugin) and margin renders
-on top. It is read-only with respect to buffer text; it only adds decorations
-(extmarks, signs, virtual lines).
+The plugin does not create diff views or change buffer text. It adds extmarks,
+signs, and virtual lines to existing buffers.
 
 ==============================================================================
 2. REQUIREMENTS                                            *margin-requirements*
@@ -34,7 +32,7 @@ on top. It is read-only with respect to buffer text; it only adds decorations
 ==============================================================================
 3. SETUP                                                          *margin-setup*
 
-Calling |setup()| is optional; every command works with defaults. >lua
+|setup()| is optional. All commands use default values before setup. >lua
 
     require('margin').setup({
       inline = true,
@@ -44,13 +42,12 @@ Calling |setup()| is optional; every command works with defaults. >lua
       data_dir = nil,
     })
 <
-With lazy.nvim: >lua
+Install the plugin with lazy.nvim: >lua
 
     { 'orestisfl/margin.nvim', opts = {} }
 <
-margin can be lazy-loaded. Any <Plug> mapping or |:Margin| command fully
-activates it, including a one-time pass that restores comments in buffers that
-were already open. Load on the keymaps: >lua
+You can load margin.nvim from a <Plug> mapping or a |:Margin| command. The
+plugin restores comments in buffers that are already open. >lua
 
     {
       'orestisfl/margin.nvim',
@@ -63,8 +60,8 @@ were already open. Load on the keymaps: >lua
       opts = {},
     }
 <
-To restore comments on reopened diffs without first pressing a key, load on
-buffer-read instead: >lua
+To show saved comments before you use a mapping, load the plugin when Neovim
+reads a buffer: >lua
 
     {
       'orestisfl/margin.nvim',
@@ -76,41 +73,37 @@ buffer-read instead: >lua
 4. COMMANDS                                                    *margin-commands*
 
                                                                       *:Margin*
-:Margin comment         Comment on the current line. In visual mode or with a
-                        range, comment on the range.
-:Margin edit            Edit the comment under the cursor.
-:Margin delete          Delete the comment under the cursor.
-:Margin list[!]         Populate and open the quickfix list. With `!`, includes
-                        archived comments (prefixed `[archived]`).
-:Margin export[!] [path]
-                        Export the session as markdown. Without a path, opens
-                        the markdown in a scratch split; with a path, writes
-                        that file and offers to archive the comments written.
-                        With `!`, includes already-archived comments and does
-                        not archive. See |margin-export| and |margin-archive|.
-:Margin archive         Archive the comment under the cursor.
-:Margin unarchive       Unarchive the comment under the cursor.
-:Margin archived        Toggle visibility of archived comments (dimmed).
-:Margin inline          Toggle inline comment boxes (signs remain).
-:Margin clear           Delete ALL comments in the session, after confirming.
+:Margin comment         Add a comment to the current line or range.
+:Margin edit            Edit the comment at the cursor.
+:Margin delete          Delete the comment at the cursor.
+:Margin[!] list         Open comments in the quickfix list. `!` includes
+                        archived comments.
+:Margin[!] export [path]
+                        Export comments to a split or a file. `!` includes
+                        archived comments and does not archive them.
+:Margin archive         Archive the comment at the cursor.
+:Margin unarchive       Unarchive the comment at the cursor.
+:Margin archived        Show or hide archived comments.
+:Margin inline          Show or hide inline comment boxes.
+:Margin clear           Delete all comments after confirmation.
 
-"Under the cursor" means the cursor line falls within a comment's line range.
-When several overlap, the innermost (smallest range) is chosen.
+Cursor commands use the smallest comment range that contains the cursor line.
 
 ==============================================================================
 5. MAPPINGS                                                    *margin-mappings*
 
-No default keymaps are created. The following <Plug> mappings are provided: >
+The plugin does not create default mappings. It provides these <Plug>
+mappings: >
 
     <Plug>(margin-comment)   n and x mode
     <Plug>(margin-edit)
     <Plug>(margin-delete)
     <Plug>(margin-list)
     <Plug>(margin-export)
-    <Plug>(margin-archive)   archive comment under cursor
+    <Plug>(margin-archive)   archive comment at cursor
     <Plug>(margin-unarchive)
-    <Plug>(margin-archived)  toggle visibility of archived comments
-    <Plug>(margin-next)      jump to next comment in buffer (wraps)
+    <Plug>(margin-archived)  show or hide archived comments
+    <Plug>(margin-next)      go to next comment in buffer
     <Plug>(margin-prev)
 <
 Suggested bindings: >lua
@@ -124,45 +117,43 @@ Suggested bindings: >lua
     map('n', ']m', '<Plug>(margin-next)')
     map('n', '[m', '<Plug>(margin-prev)')
 <
-COMPOSER                                                       *margin-composer*
+COMMENT WINDOW                                                 *margin-composer*
 
-Comments are composed in a centered floating window (filetype markdown, full
-modal editing, multi-line). Save with `:w` or <C-s>. Pressing `q` in normal
-mode discards empty text immediately; for non-empty text, it asks whether to
-save (default: Yes). Closing the window aborts. Empty text aborts creation and
-leaves an edited comment unchanged. Trailing blank lines are trimmed.
+The comment window uses the `markdown` file type. It accepts multiple lines.
+
+Use `:w` or <C-s> to save the comment. If the comment is empty, use `q` to
+cancel. If the comment contains text, `q` asks whether to save it.
+
+Empty text does not create or change a comment. margin.nvim removes blank lines
+from the end of saved comments.
 
 ==============================================================================
 6. CONFIGURATION                                                 *margin-config*
 
                                                               *margin.Config*
 inline          (boolean, default true)
-                Render inline comment boxes with |virt_lines|. When off, only
-                signs mark commented lines. Toggle at runtime with |:Margin|
-                inline.
+                Show comment boxes with |virt_lines|. When false, only signs
+                identify comments.
 
 show_archived   (boolean, default false)
-                Render archived comments (dimmed, with an `(archived)` tag).
-                When off they are hidden entirely. Toggle at runtime with
-                |:Margin| archived. See |margin-archive|.
+                Show archived comments with dim text and an `(archived)` tag.
+                See |margin-archive|.
 
 max_width       (integer, default 80)
-                Wrap width for comment box text.
+                Maximum width of comment-box text.
 
 context_lines   (integer, default 3)
-                Lines of context in export snippets and the |ctxlen| passed to
-                the diff engine for export hunks.
+                Number of context lines in snippets and diff hunks.
 
 sign_text       (string, default '┃')
-                Sign-column indicator for commented lines.
+                Text in the sign column for comments.
 
 data_dir        (string|nil, default nil)
-                Override the session storage directory. Defaults to
-                `stdpath('data')/margin`.
+                Session directory. The default is `stdpath('data')/margin`.
 
 HIGHLIGHTS                                                   *margin-highlights*
 
-Defined with `default = true` links; override freely: >
+The plugin defines these groups with `default = true`: >
 
     MarginSign     -> DiagnosticSignInfo
     MarginComment  -> Comment
@@ -173,66 +164,61 @@ Defined with `default = true` links; override freely: >
 ==============================================================================
 7. EXPORT FORMAT                                                 *margin-export*
 
-`:Margin export` renders the whole session to a fixed markdown format: a short
-preamble, one `## path:line` anchored section per comment, and a fenced
-context block. In a live diff window the block is the relevant unified-diff
-hunk (fenced `diff`); elsewhere it is the commented lines plus context lines
-(fenced with the file's language). Old-side comments append ` (old version)`
-to the header; orphaned comments append `(position may be stale)` to the body.
+`:Margin export` writes one `## path:line` section for each comment. Each
+section contains the comment and its code context.
 
-Without a path argument the markdown opens in a `margin://export` scratch
-split (filetype markdown), ready to edit, yank, or `:w file`. Re-exporting
-replaces its contents. `require('margin').export()` returns the markdown
-string.
+In a diff window, the context is the related unified-diff hunk. In other
+buffers, the context contains the selected lines and nearby lines.
+
+An old-side header includes ` (old version)`. An orphaned comment includes
+`(position can be stale)`.
+
+Without a path, the Markdown opens in a `margin://export` split. You can edit,
+yank, or save the export. A new export replaces the split contents.
+
+`require('margin').export()` returns the Markdown string.
 
                                                               *margin-archive*
-Archiving avoids re-exporting comments you have already handed off. Archived
-comments are excluded from `:Margin export` and `:Margin list`, and are hidden
-from the buffer by default, but keep their position and still re-anchor.
+Archived comments do not appear in normal lists or exports. They keep their
+positions and move when the related text moves.
 
-Writing an export to a file (`:Margin export {path}`) prompts before archiving
-the comments it wrote; confirm and the next file export contains only comments
-added since, or decline (Esc / No) to keep them active for a re-export. The
-scratch-split preview (no path) never archives.
+A file export asks about archiving after it writes the file. A split export
+asks when the split closes.
 
-`:Margin archived` toggles archived comments visible (or set |show_archived|).
-Shown, they render the full box dimmed with an `(archived)` tag and a dimmed
-sign; hidden, motions and cursor actions skip them, so make them visible to put
-the cursor on one and `:Margin unarchive` it. Visibility does not put them back
-in the export. Archive or unarchive a single comment under the cursor with
-`:Margin archive` / `:Margin unarchive`.
+`:Margin archived` shows archived comments with dim text and an `(archived)`
+tag. Use `:Margin unarchive` to make the selected comment active.
 
-To include archived comments in output, add `!`: `:Margin list!` lists them
-(prefixed `[archived]`); `:Margin export!` renders them (header suffix
-` (archived)`) without archiving anything further.
+Add `!` to list or export archived comments. These commands do not change the
+archive state.
 
 ==============================================================================
 8. DIFF ALIGNMENT                                             *margin-alignment*
 
-When a comment is rendered inline in one pane of a native two-window diff, an
-equal-height block of blank filler is placed at the mapped counterpart line in
-the other pane so the two panes stay vertically aligned. This holds for
-comments on context lines, on added lines (coexisting with native diff
-filler), and at the top of the buffer.
+In a two-window diff, margin.nvim adds blank lines below the related line in
+the other buffer. These lines keep both buffers aligned.
 
-With more than two diff windows (3-way merge) the first counterpart is used.
+For a diff with more than two windows, margin.nvim uses the first related
+window.
 
 ==============================================================================
 9. PERSISTENCE                                               *margin-persistence*
 
-Comments survive restarts, keyed by project root (detected via a `.git`
-marker, falling back to the working directory; git is never invoked). Sessions
-are stored as JSON under |margin-config| `data_dir`, one file per root.
+margin.nvim finds the project root from a `.git` marker. If no marker exists,
+it uses the working directory.
 
-Comments re-anchor by content matching on buffer load: an exact match at the
-stored line wins; otherwise a unique match within 40 lines relocates the
-comment; otherwise it is flagged orphaned (never silently dropped) and shown
-with the orphan style.
+The plugin stores one JSON session file for each project root. The `data_dir`
+value in |margin-config| selects the session directory.
+
+When a buffer loads, margin.nvim finds the saved text at its old line. If the
+text moved, it searches 40 lines in each direction.
+
+If one line matches, the comment moves to that line. If no unique line matches,
+the plugin marks the comment as orphaned and keeps it.
 
 ==============================================================================
 10. HEALTH                                                       *margin-health*
 
-Run `:checkhealth margin` to verify the Neovim version and report the
-resolved data directory and stored session count.
+Run `:checkhealth margin`. The report contains the Neovim version, the session
+directory, and the number of stored sessions.
 
 vim:tw=78:ts=8:ft=help:norl:

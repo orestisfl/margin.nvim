@@ -1,5 +1,5 @@
 local MiniTest = require('mini.test')
-local expect, eq = MiniTest.expect, MiniTest.expect.equality
+local eq = MiniTest.expect.equality
 
 -- string.match assertion (mini.test has no string_matches builtin).
 local expect_match = MiniTest.new_expectation('string matching', function(str, pat)
@@ -64,17 +64,14 @@ T['CRUD'] = MiniTest.new_set()
 
 T['CRUD']['add creates a comment with correct fields'] = function()
   local buf = open_file('a.txt', { 'line one', 'line two', 'line three' })
-  local c = child.lua_get(([[(function()
-    local c = S.add(%d, 2, 2, 'a note')
-    return c
-  end)()]]):format(buf))
+  local c = child.lua_get(([[ S.add(%d, 2, 2, 'a note') ]]):format(buf))
   eq(c.lnum, 2)
   eq(c.end_lnum, 2)
   eq(c.text, 'a note')
   eq(c.side, 'new')
   eq(c.line_text, 'line two')
   eq(c.orphaned, false)
-  expect.equality(type(c.id), 'string')
+  eq(type(c.id), 'string')
   eq(c.path, 'a.txt')
 end
 
@@ -165,15 +162,15 @@ T['archive']['set_archived toggles the flag and persists'] = function()
   eq(res, true)
 end
 
-T['archive']['archive_active archives only unarchived comments'] = function()
+T['archive']['archive_comments skips already-archived comments'] = function()
   local buf = open_file('a.txt', { 'a', 'b', 'c' })
   local res = child.lua_get(([[(function()
     local c1 = S.add(%d, 1, 1, 'one')
     S.add(%d, 2, 2, 'two')
     local sess = S.for_buf(%d)
     S.set_archived(sess, c1, true)
-    local first = S.archive_active(sess)   -- only 'two' remains active
-    local second = S.archive_active(sess)  -- nothing left
+    local first = S.archive_comments(sess, sess.comments)   -- only 'two' is active
+    local second = S.archive_comments(sess, sess.comments)  -- nothing left
     return { first = first, second = second }
   end)()]]):format(buf, buf, buf))
   eq(res.first, 1)
@@ -269,7 +266,7 @@ T['persistence']['store filename is stable and unique per root'] = function()
     return { a = a, b = b, a2 = a2 }
   end)()]])
   eq(names.a, names.a2)
-  expect.equality(names.a ~= names.b, true)
+  eq(names.a ~= names.b, true)
   expect_match(names.a, 'projA%-%x+%.json')
 end
 

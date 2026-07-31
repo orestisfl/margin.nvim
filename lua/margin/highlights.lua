@@ -9,14 +9,8 @@ local links = {
   MarginArchived = 'NonText',
 }
 
-local done = false
-
---- Define margin's highlight groups once. Safe to call repeatedly.
+--- Define the default highlight groups.
 function M.ensure()
-  if done then
-    return
-  end
-  done = true
   for group, target in pairs(links) do
     vim.api.nvim_set_hl(0, group, { link = target, default = true })
   end

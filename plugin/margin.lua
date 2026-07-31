@@ -8,37 +8,25 @@ if vim.fn.has('nvim-0.12') == 0 then
   return
 end
 
+local margin = require('margin')
+
 local subcommands = {
   comment = function(a)
-    require('margin.actions').comment({ line1 = a.line1, line2 = a.line2 })
+    margin.comment({ line1 = a.line1, line2 = a.line2 })
   end,
-  edit = function()
-    require('margin.actions').edit()
-  end,
-  delete = function()
-    require('margin.actions').delete()
-  end,
+  edit = margin.edit,
+  delete = margin.delete,
   list = function(a)
-    require('margin.qf').list(a.bang)
+    margin.list(a.bang)
   end,
   export = function(a)
-    require('margin.actions').export(a.fargs[2], a.bang)
+    margin.export(a.fargs[2], a.bang)
   end,
-  archive = function()
-    require('margin.actions').archive()
-  end,
-  unarchive = function()
-    require('margin.actions').unarchive()
-  end,
-  inline = function()
-    require('margin.actions').toggle_inline()
-  end,
-  archived = function()
-    require('margin.actions').toggle_archived()
-  end,
-  clear = function()
-    require('margin.actions').clear()
-  end,
+  archive = margin.archive,
+  unarchive = margin.unarchive,
+  inline = margin.toggle_inline,
+  archived = margin.toggle_archived,
+  clear = margin.clear,
 }
 
 vim.api.nvim_create_user_command('Margin', function(a)
@@ -78,65 +66,47 @@ local maps = {
         vim.cmd('normal! \27')
         local line1 = vim.fn.line("'<")
         local line2 = vim.fn.line("'>")
-        require('margin.actions').comment({ line1 = line1, line2 = line2 })
+        margin.comment({ line1 = line1, line2 = line2 })
       else
-        require('margin.actions').comment()
+        margin.comment()
       end
     end,
   },
   ['(margin-edit)'] = {
     modes = { 'n' },
-    fn = function()
-      require('margin.actions').edit()
-    end,
+    fn = margin.edit,
   },
   ['(margin-delete)'] = {
     modes = { 'n' },
-    fn = function()
-      require('margin.actions').delete()
-    end,
+    fn = margin.delete,
   },
   ['(margin-list)'] = {
     modes = { 'n' },
-    fn = function()
-      require('margin.qf').list()
-    end,
+    fn = margin.list,
   },
   ['(margin-archive)'] = {
     modes = { 'n' },
-    fn = function()
-      require('margin.actions').archive()
-    end,
+    fn = margin.archive,
   },
   ['(margin-unarchive)'] = {
     modes = { 'n' },
-    fn = function()
-      require('margin.actions').unarchive()
-    end,
+    fn = margin.unarchive,
   },
   ['(margin-archived)'] = {
     modes = { 'n' },
-    fn = function()
-      require('margin.actions').toggle_archived()
-    end,
+    fn = margin.toggle_archived,
   },
   ['(margin-export)'] = {
     modes = { 'n' },
-    fn = function()
-      require('margin.actions').export()
-    end,
+    fn = margin.export,
   },
   ['(margin-next)'] = {
     modes = { 'n' },
-    fn = function()
-      require('margin.qf').next()
-    end,
+    fn = margin.next,
   },
   ['(margin-prev)'] = {
     modes = { 'n' },
-    fn = function()
-      require('margin.qf').prev()
-    end,
+    fn = margin.prev,
   },
 }
 

@@ -6,6 +6,10 @@ local highlights = require('margin.highlights')
 
 local M = {}
 
+---@alias margin.HighlightChunk [string, string]
+---@alias margin.VirtualLine margin.HighlightChunk[]
+---@alias margin.VirtualLines margin.VirtualLine[]
+
 --- Comment-box virtual lines (attached to the source buffer).
 M.ns_box = vim.api.nvim_create_namespace('margin.box')
 --- Mirrored blank filler in the counterpart buffer, owned by source comments.
@@ -48,7 +52,7 @@ end
 ---@param comment margin.Comment
 ---@param tag string parenthesized suffix without the parentheses
 ---@param hl string highlight group
----@return table[] virt_lines
+---@return margin.VirtualLines
 local function summary_line(comment, tag, hl)
   local first = vim.split(comment.text, '\n', { plain = true })[1] or ''
   return { { { '└─ ' .. first .. ' (' .. tag .. ')', hl } } }
@@ -59,7 +63,7 @@ end
 --- the full frame dimmed with an (archived) tag (only reached when visible).
 ---@param comment margin.Comment
 ---@param width integer
----@return table[] virt_lines (list of chunk-lists)
+---@return margin.VirtualLines
 local function box_virt_lines(comment, width)
   if comment.orphaned then
     return summary_line(comment, 'stale', 'MarginOrphan')
@@ -88,7 +92,7 @@ end
 
 --- N blank virtual lines for counterpart filler.
 ---@param n integer
----@return table[]
+---@return margin.VirtualLines
 local function blank_lines(n)
   local out = {}
   for _ = 1, n do
@@ -148,14 +152,14 @@ local function rebuild(tab)
       local sess = session.for_buf(buf)
       local comments = session.comments_for_path(sess, path)
       if #comments > 0 then
-        anchor.ensure(buf)
+        anchor.ensure(buf, comments)
         local width = math.min(config.current.max_width, view.width - 4)
         local line_count = vim.api.nvim_buf_line_count(buf)
         local counterparts = {}
         for _, win in ipairs(view.wins) do
-          local cp = vim.wo[win].diff and diffmap.counterpart(win) or nil
-          if cp and vim.api.nvim_buf_is_valid(cp.buf) then
-            counterparts[cp.buf] = true
+          local cp_buf = vim.wo[win].diff and diffmap.counterpart(win) or nil
+          if cp_buf and vim.api.nvim_buf_is_valid(cp_buf) then
+            counterparts[cp_buf] = true
           end
         end
 

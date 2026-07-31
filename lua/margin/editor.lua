@@ -8,10 +8,7 @@ local function normalize(lines)
   while last > 0 and lines[last]:match('^%s*$') do
     last = last - 1
   end
-  if last == 0 then
-    return ''
-  end
-  return table.concat(vim.list_slice(lines, 1, last), '\n')
+  return table.concat(lines, '\n', 1, last)
 end
 
 --- Open the floating comment composer.
@@ -44,12 +41,7 @@ function M.open(opts)
   })
   vim.wo[win].wrap = true
 
-  local submitted = false
   local function submit()
-    if submitted then
-      return
-    end
-    submitted = true
     local text = normalize(vim.api.nvim_buf_get_lines(buf, 0, -1, false))
     if vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_win_close(win, true)
