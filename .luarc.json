@@ -1,8 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
   "runtime.version": "LuaJIT",
-  "workspace.library": ["/usr/share/nvim/runtime/lua", "${3rd}/luv/library"],
+  "workspace.library": ["$VIMRUNTIME", "${3rd}/luv/library"],
   "workspace.checkThirdParty": false,
-  "diagnostics.globals": ["vim"],
-  "diagnostics.disable": ["duplicate-set-field"]
+  "diagnostics.globals": ["vim"]
 }
