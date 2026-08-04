@@ -241,8 +241,10 @@ end
 local BUFNAME = 'margin://export'
 
 ---@class margin.ExportPreview
+---@field win integer
 ---@field session margin.Session
 ---@field comments margin.Comment[]
+---@field offer_archive boolean
 
 ---@type table<integer, margin.ExportPreview>
 local previews = {}
@@ -267,23 +269,20 @@ local function close_preview(buf)
     return
   end
 
-  local active = {}
-  local selected = {}
-  for _, c in ipairs(preview.comments) do
-    selected[c.id] = true
-  end
-  for _, c in ipairs(preview.session.comments) do
-    if selected[c.id] and not c.archived then
-      active[#active + 1] = c
+  -- BufWipeout can run while :quit is already closing this window. Defer the
+  -- close so that path can finish first; buffer-switching close mappings leave
+  -- the preview's split alive, and this removes it on the next event-loop turn.
+  vim.schedule(function()
+    if vim.api.nvim_win_is_valid(preview.win) then
+      pcall(vim.api.nvim_win_close, preview.win, true)
     end
-  end
-  if #active == 0 then
+  end)
+
+  if not preview.offer_archive then
     return
   end
 
-  if confirm_archive(#active) and session.archive_comments(preview.session, active) > 0 then
-    require('margin.render').schedule()
-  end
+  archive_export(preview.session, preview.comments)
 end
 
 --- Show the markdown in the export scratch buffer, in a split below.
@@ -306,8 +305,6 @@ local function show(markdown, sess, exported, offer_archive)
       end,
     })
   end
-  previews[buf] = offer_archive and { session = sess, comments = exported } or nil
-
   local text = markdown:gsub('\n$', '')
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(text, '\n', { plain = true }))
 
@@ -315,8 +312,9 @@ local function show(markdown, sess, exported, offer_archive)
   if win then
     vim.api.nvim_set_current_win(win)
   else
-    vim.api.nvim_open_win(buf, true, { split = 'below', win = -1 })
+    win = vim.api.nvim_open_win(buf, true, { split = 'below', win = -1 })
   end
+  previews[buf] = { win = win, session = sess, comments = exported, offer_archive = offer_archive }
 end
 
 --- Export the current session. With `path`, writes a file and offers to archive

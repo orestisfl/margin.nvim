@@ -196,6 +196,42 @@ T['buffer']['re-export reuses the scratch buffer and window'] = function()
   eq(res.has_second, true)
 end
 
+T['buffer']['switching buffers to close the preview also closes its split'] = function()
+  local res = child.lua_get([[(function()
+    vim.fn.writefile({ 'a' }, _G.tmp .. '/a.txt')
+    vim.fn.writefile({ 'b' }, _G.tmp .. '/b.txt')
+    vim.cmd('edit ' .. _G.tmp .. '/a.txt')
+    vim.cmd('vsplit ' .. _G.tmp .. '/b.txt')
+    local buf = vim.api.nvim_get_current_buf()
+    S.add(buf, 1, 1, 'note')
+    A.on_buf_load(buf)
+    _G.confirm_choice = 2
+    E.run()
+    local preview = vim.api.nvim_get_current_buf()
+    local before = #vim.api.nvim_list_wins()
+
+    -- Match buffer-close mappings which switch the preview window to a listed
+    -- buffer. Because the preview has bufhidden=wipe, the switch wipes it.
+    vim.cmd('bprevious')
+    local closed = vim.wait(100, function()
+      return #vim.api.nvim_list_wins() == before - 1
+    end)
+
+    return {
+      before = before,
+      after = #vim.api.nvim_list_wins(),
+      closed = closed,
+      preview_valid = vim.api.nvim_buf_is_valid(preview),
+      confirms = _G.confirm_calls,
+    }
+  end)()]])
+  eq(res.before, 3)
+  eq(res.after, 2)
+  eq(res.closed, true)
+  eq(res.preview_valid, false)
+  eq(res.confirms, 1)
+end
+
 T['archive'] = MiniTest.new_set()
 
 T['archive']['render omits archived comments by default'] = function()
