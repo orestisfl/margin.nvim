@@ -6,6 +6,10 @@ context to paste into an AI coding agent.
 margin.nvim adds decorations to existing buffers. It does not create diff views
 or change buffer text.
 
+## Demo
+
+https://github.com/user-attachments/assets/2f52a299-3285-432d-b6d0-e6f614402ec3
+
 ## Features
 
 - Add comments to a line or visual range.

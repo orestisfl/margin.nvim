@@ -1,2 +1,4 @@
 /deps/
 *.tmp
+assets/
+scripts/demo/.data/
